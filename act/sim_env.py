@@ -35,7 +35,7 @@ def make_sim_env(task_name):
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
     """
     os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/boxjod/Gym/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04"
-    if os.environ['CUDA_VISIBLE_DEVICES'] == 7:
+    if os.getlogin() == 'ubuntu':
         os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/ubuntu/data0/liangws/peract_root/CoppeliaSim"
     
     # 1. 设置仿真环境的配置文件
