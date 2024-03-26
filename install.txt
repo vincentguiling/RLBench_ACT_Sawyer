@@ -17,7 +17,7 @@ git clone https://github.com/stepjam/RLBench.git
 cd RLBench
 pip install -r requirements.txt
 pip install -e .
-python tools/task_builer.py
+python tools/task_builder.py
 
 # 5. ACT
 pip install torchvision
