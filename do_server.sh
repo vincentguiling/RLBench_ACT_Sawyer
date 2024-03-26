@@ -3,4 +3,4 @@
 git checkout .
 git pull
 
-bash train.eval.sh
+bash train_eval.sh
