@@ -16,19 +16,25 @@ python3 RLBench/tools/dataset_generator_sawyer_act2.py \
 python3 act/visualize_episodes.py --dataset_dir Datasets/reach_target_sawyer2/variation0 --episode_idx 0
 
 ## train and eval
+python3 RLBench/tools/dataset_generator_sawyer_act2.py \
+    --save_path Datasets \
+    --tasks reach_target_sawyer2 \
+    --episodes_per_task 55 \
+    --variations 1 \
+;\
 python3 act/imitate_episodes_sawyer2.py \
---task_name reach_target_sawyer2 \
---ckpt_dir Trainings \
---policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
---num_epochs 1000  --lr 1e-5 \
---seed 0 \
+    --task_name reach_target_sawyer2 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 1000  --lr 1e-5 \
+    --seed 0 \
 ; \
 python3 act/imitate_episodes_sawyer2.py \
---task_name reach_target_sawyer2 \
---ckpt_dir Trainings \
---policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
---num_epochs 1000  --lr 1e-5 \
---seed 0 \
---eval \
---temporal_agg 
+    --task_name reach_target_sawyer2 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 1000  --lr 1e-5 \
+    --seed 0 \
+    --eval \
+    --temporal_agg 
 

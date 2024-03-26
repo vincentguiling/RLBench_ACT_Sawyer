@@ -119,7 +119,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
         action_mode=MoveArmThenGripper(JointVelocity(), Discrete()),
         obs_config=obs_config,
-        headless=True,
+        headless=False,
         robot_setup='sawyer'
         )
     rlbench_env.launch()

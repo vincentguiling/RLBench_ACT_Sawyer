@@ -1452,7 +1452,7 @@ def simGetConfigForTipPose(ikGroupHandle, jointHandles, thresholdDist, maxTimeIn
         ikGroupHandle, jointCnt, jointHandles, thresholdDist,
         maxTimeInMs, retConfigm, metric, collisionPairCnt, collisionPairs,
         jointOptions, lowLimits, ranges, reserved)
-    _check_return(ret)
+    # _check_return(ret) #################################################################################################
     _check_null_return(retConfigm)
     return list(retConfigm) if ret == 1 else []
 

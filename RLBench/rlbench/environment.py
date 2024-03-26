@@ -105,6 +105,7 @@ class Environment(object):
             panda_pos = panda_arm.get_position()
             panda_arm.remove()
             arm_path = join(DIR_PATH, 'robot_ttms', self._robot_setup + '.ttm')
+            print("arm_path_dir:", arm_path)
             self._pyrep.import_model(arm_path)
             arm, gripper = arm_class(), gripper_class()
             arm.set_position(panda_pos)

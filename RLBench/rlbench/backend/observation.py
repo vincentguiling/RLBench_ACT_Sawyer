@@ -32,7 +32,7 @@ class Observation(object):
                  gripper_pose: np.ndarray,
                  gripper_matrix: np.ndarray,
                  gripper_joint_positions: np.ndarray,
-                #  gripper_touch_forces: np.ndarray,
+                 gripper_touch_forces: np.ndarray,
                  task_low_dim_state: np.ndarray,
                  misc: dict):
         self.left_shoulder_rgb = left_shoulder_rgb
@@ -62,7 +62,7 @@ class Observation(object):
         self.gripper_pose = gripper_pose
         self.gripper_matrix = gripper_matrix
         self.gripper_joint_positions = gripper_joint_positions
-        # self.gripper_touch_forces = gripper_touch_forces
+        self.gripper_touch_forces = gripper_touch_forces
         self.task_low_dim_state = task_low_dim_state
         self.misc = misc
 
