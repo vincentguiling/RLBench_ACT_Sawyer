@@ -1,8 +1,12 @@
 #!/bin/bash
 
-
-epoch_list=(1000 2000 3000 1000 2000 3000 1000 2000 3000 1000 2000 3000)
-
+python3 RLBench/tools/dataset_generator_sawyer_act2.py \
+    --save_path Datasets \
+    --tasks reach_target_sawyer2 \
+    --episodes_per_task 55 \
+    --variations 1
+    
+epoch_list=(1000 2000 3000)
 for epoch in ${epoch_list[@]}
   do
   echo '#######################################'
