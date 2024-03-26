@@ -49,16 +49,18 @@ class DETRVAE(nn.Module):
         self.transformer = transformer
         self.encoder = encoder
         hidden_dim = transformer.d_model
+        
         self.action_head = nn.Linear(hidden_dim, state_dim)
         self.is_pad_head = nn.Linear(hidden_dim, 1)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
+        
         if backbones is not None:
-            self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1)
-            self.backbones = nn.ModuleList(backbones)
-            self.input_proj_robot_state = nn.Linear(14, hidden_dim)
+            self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1) # 卷积层
+            self.backbones = nn.ModuleList(backbones) 
+            self.input_proj_robot_state = nn.Linear(8, hidden_dim)
         else:
             # input_dim = 14 + 7 # robot_state + env_state
-            self.input_proj_robot_state = nn.Linear(14, hidden_dim)
+            self.input_proj_robot_state = nn.Linear(8, hidden_dim)
             self.input_proj_env_state = nn.Linear(7, hidden_dim)
             self.pos = torch.nn.Embedding(2, hidden_dim)
             self.backbones = None
@@ -66,8 +68,8 @@ class DETRVAE(nn.Module):
         # encoder extra parameters
         self.latent_dim = 32 # final size of latent z # TODO tune
         self.cls_embed = nn.Embedding(1, hidden_dim) # extra cls token embedding
-        self.encoder_action_proj = nn.Linear(14, hidden_dim) # project action to embedding
-        self.encoder_joint_proj = nn.Linear(14, hidden_dim)  # project qpos to embedding
+        self.encoder_action_proj = nn.Linear(8, hidden_dim) # project action to embedding
+        self.encoder_joint_proj = nn.Linear(8, hidden_dim)  # project qpos to embedding
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
         self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
 
@@ -90,30 +92,36 @@ class DETRVAE(nn.Module):
             action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim)
             qpos_embed = self.encoder_joint_proj(qpos)  # (bs, hidden_dim)
             qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim)
+            
             cls_embed = self.cls_embed.weight # (1, hidden_dim)
             cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
+            
             encoder_input = torch.cat([cls_embed, qpos_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
             encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
+            
             # do not mask cls token
             cls_joint_is_pad = torch.full((bs, 2), False).to(qpos.device) # False: not a padding
             is_pad = torch.cat([cls_joint_is_pad, is_pad], axis=1)  # (bs, seq+1)
+            
             # obtain position embedding
             pos_embed = self.pos_table.clone().detach()
             pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
+            
             # query model
             encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad)
             encoder_output = encoder_output[0] # take cls output only
+            
             latent_info = self.latent_proj(encoder_output)
-            mu = latent_info[:, :self.latent_dim]
-            logvar = latent_info[:, self.latent_dim:]
-            latent_sample = reparametrize(mu, logvar)
+            mu = latent_info[:, :self.latent_dim] # mu 是做隐层的映射，用来干什么了？
+            logvar = latent_info[:, self.latent_dim:] # logvar是隐层的另一个维度的映射提取
+            latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
             latent_input = self.latent_out_proj(latent_sample)
-        else:
+        else: # 验证的时候没用Z吗？ 对，Z=0向量
             mu = logvar = None
             latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
             latent_input = self.latent_out_proj(latent_sample)
 
-        if self.backbones is not None:
+        if self.backbones is not None: # 用骨干网络做图像预处理
             # Image observation features and position embeddings
             all_cam_features = []
             all_cam_pos = []
@@ -123,8 +131,10 @@ class DETRVAE(nn.Module):
                 pos = pos[0]
                 all_cam_features.append(self.input_proj(features))
                 all_cam_pos.append(pos)
+                
             # proprioception features
             proprio_input = self.input_proj_robot_state(qpos)
+            
             # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
@@ -134,6 +144,7 @@ class DETRVAE(nn.Module):
             env_state = self.input_proj_env_state(env_state)
             transformer_input = torch.cat([qpos, env_state], axis=1) # seq length = 2
             hs = self.transformer(transformer_input, None, self.query_embed.weight, self.pos.weight)[0]
+            
         a_hat = self.action_head(hs)
         is_pad_hat = self.is_pad_head(hs)
         return a_hat, is_pad_hat, [mu, logvar]
@@ -166,8 +177,8 @@ class CNNMLP(nn.Module):
                 backbone_down_projs.append(down_proj)
             self.backbone_down_projs = nn.ModuleList(backbone_down_projs)
 
-            mlp_in_dim = 768 * len(backbones) + 14
-            self.mlp = mlp(input_dim=mlp_in_dim, hidden_dim=1024, output_dim=14, hidden_depth=2)
+            mlp_in_dim = 768 * len(backbones) + 8
+            self.mlp = mlp(input_dim=mlp_in_dim, hidden_dim=1024, output_dim=8, hidden_depth=2)
         else:
             raise NotImplementedError
 
@@ -226,8 +237,8 @@ def build_encoder(args):
     return encoder
 
 
-def build(args):
-    state_dim = 14 # TODO hardcode
+def build(args): # 核心模型部分 称为类VAE模型
+    state_dim = 8 #14 # TODO hardcode
 
     # From state
     # backbone = None # from state for now, no need for conv nets
@@ -241,12 +252,13 @@ def build(args):
     encoder = build_encoder(args)
 
     model = DETRVAE(
-        backbones,
-        transformer,
-        encoder,
+        backbones, # resnet18
+        transformer, # 用来预测动作的
+        encoder, # 用来计算 z 的
+        # 输出层
         state_dim=state_dim,
-        num_queries=args.num_queries,
-        camera_names=args.camera_names,
+        num_queries=args.num_queries, # 每个演示的步数
+        camera_names=args.camera_names, # 相机名字
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -255,7 +267,7 @@ def build(args):
     return model
 
 def build_cnnmlp(args):
-    state_dim = 14 # TODO hardcode
+    state_dim = 8 #14 # TODO hardcode
 
     # From state
     # backbone = None # from state for now, no need for conv nets

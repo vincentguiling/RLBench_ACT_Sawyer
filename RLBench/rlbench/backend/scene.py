@@ -45,12 +45,14 @@ class Scene(object):
         self._cam_over_shoulder_left = VisionSensor('cam_over_shoulder_left')
         self._cam_over_shoulder_right = VisionSensor('cam_over_shoulder_right')
         self._cam_overhead = VisionSensor('cam_overhead')
+        # self._cam_head = VisionSensor('cam_head')
         self._cam_wrist = VisionSensor('cam_wrist')
         self._cam_front = VisionSensor('cam_front')
         self._cam_over_shoulder_left_mask = VisionSensor(
             'cam_over_shoulder_left_mask')
         self._cam_over_shoulder_right_mask = VisionSensor(
             'cam_over_shoulder_right_mask')
+        # self._cam_head_mask = VisionSensor('cam_head_mask')
         self._cam_overhead_mask = VisionSensor('cam_overhead_mask')
         self._cam_wrist_mask = VisionSensor('cam_wrist_mask')
         self._cam_front_mask = VisionSensor('cam_front_mask')
@@ -177,13 +179,13 @@ class Scene(object):
             joint_forces = self._obs_config.joint_forces_noise.apply(
                 np.array([-f if v < 0 else f for f, v in zip(fs, vels)]))
 
-        ee_forces_flat = None
-        if self._obs_config.gripper_touch_forces:
-            ee_forces = self.robot.gripper.get_touch_sensor_forces()
-            ee_forces_flat = []
-            for eef in ee_forces:
-                ee_forces_flat.extend(eef)
-            ee_forces_flat = np.array(ee_forces_flat)
+        # ee_forces_flat = None
+        # if self._obs_config.gripper_touch_forces:
+        #     ee_forces = self.robot.gripper.get_touch_sensor_forces()
+        #     ee_forces_flat = []
+        #     for eef in ee_forces:
+        #         ee_forces_flat.extend(eef)
+        #     ee_forces_flat = np.array(ee_forces_flat)
 
         lsc_ob = self._obs_config.left_shoulder_camera
         rsc_ob = self._obs_config.right_shoulder_camera
@@ -237,6 +239,7 @@ class Scene(object):
         overhead_rgb, overhead_depth, overhead_pcd = get_rgb_depth(
             self._cam_overhead, oc_ob.rgb, oc_ob.depth, oc_ob.point_cloud,
             oc_ob.rgb_noise, oc_ob.depth_noise, oc_ob.depth_in_meters)
+        
         wrist_rgb, wrist_depth, wrist_pcd = get_rgb_depth(
             self._cam_wrist, wc_ob.rgb, wc_ob.depth, wc_ob.point_cloud,
             wc_ob.rgb_noise, wc_ob.depth_noise, wc_ob.depth_in_meters)
@@ -289,15 +292,16 @@ class Scene(object):
             gripper_open=(
                 (1.0 if self.robot.gripper.get_open_amount()[0] > 0.9 else 0.0)
                 if self._obs_config.gripper_open else None),
-            gripper_pose=(
-                np.array(tip.get_pose())
-                if self._obs_config.gripper_pose else None),
-            gripper_matrix=(
-                tip.get_matrix()
-                if self._obs_config.gripper_matrix else None),
-            gripper_touch_forces=(
-                ee_forces_flat
-                if self._obs_config.gripper_touch_forces else None),
+                
+            ######################################################################################################
+            gripper_pose=(np.array(tip.get_pose(relative_to=self.robot.arm)) if self._obs_config.gripper_pose else None), # relative_to=self.robot
+            ######################################################################################################
+            gripper_matrix=(tip.get_matrix(relative_to=self.robot.arm) if self._obs_config.gripper_matrix else None),
+            
+            
+            # gripper_touch_forces=(
+            #     ee_forces_flat
+            #     if self._obs_config.gripper_touch_forces else None),
             gripper_joint_positions=(
                 np.array(self.robot.gripper.get_joint_positions())
                 if self._obs_config.gripper_joint_positions else None),
@@ -360,16 +364,21 @@ class Scene(object):
                         self.task) from e
                 ext = point.get_ext()
                 path.visualize()
-
+                
+                lens_episode = 1
                 done = False
                 success = False
-                while not done:
+                while done != 1:
                     done = path.step()
                     self.step()
                     self._execute_demo_joint_position_action = path.get_executed_joint_position_action()
-                    self._demo_record_step(demo, record, callable_each_step)
+                    if done == 2:
+                        lens_episode = lens_episode + 1
+                        self._demo_record_step(demo, record, callable_each_step)
                     success, term = self.task.success()
-
+                self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
+                print("the lens of episode:", lens_episode) # 输出episode的长度
+                
                 point.end_of_path()
 
                 path.clear_visualization()

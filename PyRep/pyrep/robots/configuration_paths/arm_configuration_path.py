@@ -26,6 +26,7 @@ class ArmConfigurationPath(ConfigurationPath):
         self._path_done = False
         self._num_joints = arm.get_joint_count()
         self._joint_position_action = None
+        self.count = -1
 
     def __len__(self):
         return len(self._path_points) // self._num_joints
@@ -44,12 +45,13 @@ class ArmConfigurationPath(ConfigurationPath):
 
         :return: If the end of the trajectory has been reached.
         """
-        if self._path_done:
+        if self._path_done == 1:
             raise RuntimeError('This path has already been completed. '
                                'If you want to re-run, then call set_to_start.')
         if self._rml_handle is None:
             self._rml_handle = self._get_rml_handle()
-        done = self._step_motion() == 1
+        # done = self._step_motion() == 1
+        done = self._step_motion()
         self._path_done = done
         return done
 
@@ -169,8 +171,14 @@ class ArmConfigurationPath(ConfigurationPath):
             for i in range(len(lengths) - 1):
                 if lengths[i] <= pos <= lengths[i + 1]:
                     t = (pos - lengths[i]) / (lengths[i + 1] - lengths[i])
-                    # For each joint
-                    offset = len(self._arm.joints) * i
+                    
+                    # 控制演示步数输出固定数值
+                    if self.count < i:
+                        state = 2
+                        self.count = self.count + 1
+                        
+                    # For each joint   
+                    offset = len(self._arm.joints) * i # 7个7个的取姿态数据，用插补法插入
                     p1 = self._path_points[
                          offset:offset + len(self._arm.joints)]
                     offset = self._arm._num_joints * (i + 1)
@@ -182,7 +190,7 @@ class ArmConfigurationPath(ConfigurationPath):
                     self._arm.set_joint_target_positions(qs)
                     break
         if state == 1:
-            sim.simRMLRemove(self._rml_handle)
+            sim.simRMLRemove(self._rml_handle) # 不会停留
         return state
 
     def _get_path_point_lengths(self) -> List[float]:
