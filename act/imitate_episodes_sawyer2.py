@@ -286,8 +286,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 
                 # ts_obs, reward, _ = env.step(target_qpos) # 原关节轨迹
                 try:
-                    # path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=2, relative_to=env._robot.arm))
-                    path.append(env._robot.arm.get_path(position=next_gripper_position, quaternion=next_gripper_quaternion, relative_to=env._robot.arm))
+                    path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm))
+                    # path.append(env._robot.arm.get_path(position=next_gripper_position, quaternion=next_gripper_quaternion, relative_to=env._robot.arm))
                     path[t].visualize() # 在仿真环境中画出轨迹
                 
                     done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了

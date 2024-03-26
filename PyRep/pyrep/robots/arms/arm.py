@@ -142,14 +142,14 @@ class Arm(RobotComponent):
 
         metric = joint_options = None
         valid_joint_positions = []
-        for i in range(trials):
-            config = sim.simGetConfigForTipPose(
-                self._ik_group, handles, distance_threshold, int(max_time_ms),
-                metric, collision_pairs, joint_options, low_limits, max_limits)
-            if len(config) > 0:
-                valid_joint_positions.append(config)
-            if len(valid_joint_positions) >= max_configs:
-                break
+        # for i in range(trials):
+        #     config = sim.simGetConfigForTipPose(
+        #         self._ik_group, handles, distance_threshold, int(max_time_ms),
+        #         metric, collision_pairs, joint_options, low_limits, max_limits)
+        #     if len(config) > 0:
+        #         valid_joint_positions.append(config)
+        #     if len(valid_joint_positions) >= max_configs:
+        #         break
 
         self._ik_target.set_pose(prev_pose)
         if len(valid_joint_positions) == 0:
