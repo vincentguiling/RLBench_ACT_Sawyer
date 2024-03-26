@@ -13,7 +13,7 @@ from rlbench.backend.exceptions import *
 import numpy as np
 import h5py
 import cv2
-import os
+import os, socket
 BOX_POSE = [None] # to be changed from outside # 工作区间里面随机小球出现的boundary
 
 def make_sim_env(task_name):
@@ -35,7 +35,7 @@ def make_sim_env(task_name):
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
     """
     os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/boxjod/Gym/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04"
-    if os.getlogin() == 'ubuntu':
+    if socket.gethostname() != 'XJ':
         os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/ubuntu/data0/liangws/peract_root/CoppeliaSim"
     
     # 1. 设置仿真环境的配置文件
