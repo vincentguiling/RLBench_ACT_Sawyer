@@ -72,7 +72,7 @@ def main(args):
     # 增加参数保存
     chunk_size = args['chunk_size']
     batch_size = args['batch_size']
-    ckpt_dir = args['ckpt_dir'] + f'_{num_episodes}demo_{episode_len}step_{chunk_size}chunk_{num_epochs}epoch_{batch_size}batch'
+    ckpt_dir = args['ckpt_dir'] + f'/{task_name}/{num_episodes}demo_{episode_len}step_{chunk_size}chunk_{num_epochs}epoch_{batch_size}batch'
     
     config = {
         'num_epochs': num_epochs,
@@ -286,7 +286,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 
                 # ts_obs, reward, _ = env.step(target_qpos) # 原关节轨迹
                 try:
-                    path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=2, relative_to=env._robot.arm))
+                    # path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=2, relative_to=env._robot.arm))
+                    path.append(env._robot.arm.get_path(position=next_gripper_position, quaternion=next_gripper_quaternion, relative_to=env._robot.arm))
                     path[t].visualize() # 在仿真环境中画出轨迹
                 
                     done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了
@@ -371,9 +372,9 @@ def train_bc(train_dataloader, val_dataloader, config):
     
 # 2. do train epoch
     for epoch in tqdm(range(num_epochs)): # for 循环训练 epoch
-        print(f'\nEpoch {epoch}')
+        # print(f'\nEpoch {epoch}')
         
-    # 2.1 validation and summary the last epoch：验证出 best policy
+        # 2.1 validation and summary the last epoch：验证出 best policy
         with torch.inference_mode():
             policy.eval() # 将 policy 配置为 eval 模式
             epoch_dicts = []
@@ -392,13 +393,13 @@ def train_bc(train_dataloader, val_dataloader, config):
                 min_val_loss = epoch_val_loss # 更新 最低的 loss of epochs
                 best_ckpt_info = (epoch, min_val_loss, deepcopy(policy.state_dict()))
     
-        print(f'Val loss:   {epoch_val_loss:.5f}')
-        summary_string = ''
-        for k, v in epoch_summary.items():
-            summary_string += f'{k}: {v.item():.3f} '
-        print(summary_string)
+        # print(f'Val loss:   {epoch_val_loss:.5f}')
+        # summary_string = ''
+        # for k, v in epoch_summary.items():
+        #     summary_string += f'{k}: {v.item():.3f} '
+        # print(summary_string)
         
-    # 2.2. training epoch 训练只出 last policy
+        # 2.2. training epoch 训练只出 last policy
         policy.train() # 将policy配置为 train 模式（可以更新其中的参数）
         optimizer.zero_grad() # 重置优化器梯度参数
         
@@ -415,16 +416,16 @@ def train_bc(train_dataloader, val_dataloader, config):
             
             train_history.append(detach_dict(forward_dict)) #记录训练历史
     
-    # 2.3. summary the train
+        # 2.3. summary the train
         epoch_summary = compute_dict_mean(train_history[(batch_idx+1)*epoch:(batch_idx+1)*(epoch+1)])
-        epoch_train_loss = epoch_summary['loss']
-        print(f'Train loss: {epoch_train_loss:.5f}')
-        summary_string = ''
-        for k, v in epoch_summary.items():
-            summary_string += f'{k}: {v.item():.3f} '
-        print(summary_string)
+        # epoch_train_loss = epoch_summary['loss']
+        # print(f'Train loss: {epoch_train_loss:.5f}')
+        # summary_string = ''
+        # for k, v in epoch_summary.items():
+        #     summary_string += f'{k}: {v.item():.3f} '
+        # print(summary_string)
 
-    # 2.4. save the weight file
+        # 2.4. save the weight file
         if epoch % 100 == 0: # 100个epoch保存一个权重文件
             ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
             torch.save(policy.state_dict(), ckpt_path)
