@@ -1,0 +1,52 @@
+# 1. conda
+conda create -n xj_rlbench python=3.8.10 # the version is strict
+conda activtae xj_rlbench
+
+# 2. CoppeliaSim
+bash /home/ubuntu/data0/liangws/peract_root/CoppeliaSim/coppeliaSim.sh  
+
+# 3. PyRep
+git clone https://github.com/stepjam/PyRep.git
+cd PyRep
+pip3 install -r requirements.txt
+pip3 install -e .
+python examples/example_panda_reach_target.py
+
+# 4. RLBench
+git clone https://github.com/stepjam/RLBench.git
+cd RLBench
+pip install -r requirements.txt
+pip install -e .
+python tools/task_builer.py
+
+# 5. ACT
+pip install torchvision
+pip install torch
+pip install pyquaternion
+pip install pyyaml
+pip install rospkg
+pip install pexpect
+pip install mujoco==2.3.7
+pip install dm_control==1.0.14
+pip install opencv-python
+pip install matplotlib
+pip install einops
+pip install packaging
+pip install h5py
+pip install ipython
+
+git clone https://github.com/tonyzhaozh/act.git
+cd act/detr && pip install -e .
+CUDA_VISIBLE_DEVICES=7 python3 record_sim_episodes.py \
+--task_name sim_transfer_cube_scripted \
+--dataset_dir data/sim_transfer_cube_scripted \
+--num_episodes 1
+python3 visualize_episodes.py --dataset_dir data/sim_transfer_cube_scripted --episode_idx 0
+
+# 6. RLBench_ACT_Sawyer
+git clone https://github.com/Boxjod/RLBench_ACT_Sawyer.git
+
+# 7. tools
+HDF5_Viewer: https://myhdf5.hdfgroup.org/
+
+
