@@ -35,7 +35,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 start_ts = np.random.choice(episode_len)
             # get observation at start_ts only
             qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts]
+            # qvel = root['/observations/qvel'][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
                 image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
@@ -83,7 +83,7 @@ def get_norm_stats(dataset_dir, num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
             qpos = root['/observations/qpos'][()]
-            qvel = root['/observations/qvel'][()]
+            # qvel = root['/observations/qvel'][()]
             action = root['/action'][()]
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
