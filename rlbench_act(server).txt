@@ -1,7 +1,6 @@
 # 打开CoppeliaSim
 bash /home/ubuntu/data0/liangws/peract_root/CoppeliaSim/coppeliaSim.sh  
 
-
 # 创建和修改测试任务
 python3 RLBench/tools/task_builder_sawyer.py --task reach_target_sawyer2
 
