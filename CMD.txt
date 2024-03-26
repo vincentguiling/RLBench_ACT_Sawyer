@@ -1,5 +1,6 @@
 # 打开CoppeliaSim
 bash /home/ubuntu/data0/liangws/peract_root/CoppeliaSim/coppeliaSim.sh  
+bash /home/boxjod/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04/coppeliaSim.sh  
 
 # 创建和修改测试任务
 python3 RLBench/tools/task_builder_sawyer.py --task reach_target_sawyer2
@@ -16,18 +17,19 @@ python3 act/visualize_episodes.py --dataset_dir Datasets/reach_target_sawyer2/va
 
 ## train and eval
 
-CUDA_VISIBLE_DEVICES=7 python3 act/imitate_episodes_sawyer.py \
+CUDA_VISIBLE_DEVICES=7 python3 act/imitate_episodes_sawyer2.py \
 --task_name reach_target_sawyer \
 --ckpt_dir Trainings/train \
 --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
 --num_epochs 1000  --lr 1e-5 \
 --seed 0 \
 ; \
-python3 act/imitate_episodes_sawyer.py \
+python3 act/imitate_episodes_sawyer2.py \
 --task_name reach_target_sawyer \
 --ckpt_dir Trainings/train \
 --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
 --num_epochs 1000  --lr 1e-5 \
 --seed 0 \
 --eval \
+--temporal_agg 
 
