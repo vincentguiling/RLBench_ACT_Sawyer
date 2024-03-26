@@ -1,7 +1,7 @@
 #!/bin/bash
 conda activate xj_rlbench
 git fetch
-git push
+git pull
 
 CUDA_VISIBLE_DEVICES=-1 python3 act/imitate_episodes_sawyer2.py \
 --task_name reach_target_sawyer \
