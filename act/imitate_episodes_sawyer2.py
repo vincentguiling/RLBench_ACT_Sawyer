@@ -192,7 +192,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
         num_queries = policy_config['num_queries']
         
     ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.1) # may increase for real-world tasks
+    max_timesteps = int(max_timesteps * 1.3) # may increase for real-world tasks
     ##########################################################################################################
     
     num_rollouts = 50 # 验证 50 次
