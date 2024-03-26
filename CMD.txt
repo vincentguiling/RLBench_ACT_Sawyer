@@ -9,7 +9,7 @@ python3 RLBench/tools/task_builder_sawyer.py --task reach_target_sawyer2
 CUDA_VISIBLE_DEVICES=7 python3 RLBench/tools/dataset_generator_sawyer_act2.py \
     --save_path Datasets \
     --tasks reach_target_sawyer2 \
-    --episodes_per_task 50 \
+    --episodes_per_task 55 \
     --variations 1
     
 # 数据集可视化
