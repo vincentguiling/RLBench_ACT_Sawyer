@@ -99,19 +99,21 @@ class Environment(object):
             self._robot_setup]
 
         # We assume the panda is already loaded in the scene.
-        if self._robot_setup != 'panda':
-            # Remove the panda from the scene
-            panda_arm = Panda()
-            panda_pos = panda_arm.get_position()
-            panda_arm.remove()
-            arm_path = join(DIR_PATH, 'robot_ttms', self._robot_setup + '.ttm')
-            print("arm_path_dir:", arm_path)
-            self._pyrep.import_model(arm_path)
-            arm, gripper = arm_class(), gripper_class()
-            arm.set_position(panda_pos)
-        else:
-            arm, gripper = arm_class(), gripper_class()
-
+        # if self._robot_setup != 'panda':
+        #     # Remove the panda from the scene
+        #     panda_arm = Panda()
+        #     panda_pos = panda_arm.get_position()
+        #     panda_arm.remove()
+        #     arm_path = join(DIR_PATH, 'robot_ttms', self._robot_setup + '.ttm')
+        #     self._pyrep.import_model(arm_path)
+        #     arm, gripper = arm_class(), gripper_class()
+        #     arm.set_position(panda_pos)
+        # else:
+        #     arm, gripper = arm_class(), gripper_class()
+        
+        # We assume the sawyer is already loaded in the scene.    
+        arm, gripper = arm_class(), gripper_class()
+        
         self._robot = Robot(arm, gripper)
         if self._randomize_every is None:
             self._scene = Scene(

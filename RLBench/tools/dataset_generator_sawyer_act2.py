@@ -115,6 +115,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
+        
     #############################################################################################################################################
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
         action_mode=MoveArmThenGripper(JointVelocity(), Discrete()),
@@ -122,6 +123,8 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         headless=False,
         robot_setup='sawyer'
         )
+    #############################################################################################################################################
+    
     rlbench_env.launch()
     task_env = None
     tasks_with_problems = results[i] = ''

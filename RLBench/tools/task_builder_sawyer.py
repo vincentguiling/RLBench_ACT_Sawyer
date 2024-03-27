@@ -295,7 +295,7 @@ if __name__ == '__main__':
     pr = PyRep()
     
     
-    ttt_file = join(CURRENT_DIR, '..', 'rlbench', 'task_design_sawyer.ttt') # 任务创建是使用的我的模型位置
+    ttt_file = join(CURRENT_DIR, '..', 'rlbench', TTT_FILE) # 任务创建是使用的我的模型位置
     print(ttt_file)
     
     pr.launch(ttt_file, responsive_ui=True)
