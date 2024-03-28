@@ -10,7 +10,7 @@ from rlbench.backend.utils import task_file_to_task_class
 from rlbench.environment import Environment
 import rlbench.backend.task as task
 
-import os
+import os, socket
 import pickle
 from PIL import Image
 from rlbench.backend import utils
@@ -42,6 +42,8 @@ flags.DEFINE_integer('episodes_per_task', 10,
                      'The number of episodes to collect per task.')
 flags.DEFINE_integer('variations', -1,
                      'Number of variations to collect per task. -1 for all.')
+flags.DEFINE_integer('episode_len', 51,
+                     'the lenght of one episode, means how many steps of one episode.')
 
 np.set_printoptions(linewidth=200)
 
@@ -115,12 +117,16 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
-        
+    
+    headless_val = False
+    if socket.gethostname() != 'XJ':
+        headless_val = True
+    
     #############################################################################################################################################
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
         action_mode=MoveArmThenGripper(JointVelocity(), Discrete()),
         obs_config=obs_config,
-        headless=False,
+        headless=headless_val,
         robot_setup='sawyer'
         )
     #############################################################################################################################################
@@ -174,7 +180,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
                 try:
                     # TODO: for now we do the explicit looping.
                     #############################################################################################################################################
-                    demo, = task_env.get_demos(amount=1, live_demos=True)
+                    demo, = task_env.get_demos(amount=1, live_demos=True, episode_len=FLAGS.episode_len)
                     #############################################################################################################################################
                 except Exception as e: 
                     attempts -= 1

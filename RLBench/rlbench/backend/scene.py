@@ -56,6 +56,7 @@ class Scene(object):
         self._cam_front_mask = VisionSensor('cam_front_mask')
         self._has_init_task = self._has_init_episode = False
         self._variation_index = 0
+        self._lens_episode_count = 0
 
         self._initial_robot_state = (robot.arm.get_configuration_tree(),
                                      robot.gripper.get_configuration_tree())
@@ -320,7 +321,8 @@ class Scene(object):
 
     def get_demo(self, record: bool = True,
                  callable_each_step: Callable[[Observation], None] = None,
-                 randomly_place: bool = True) -> Demo:
+                 randomly_place: bool = True,
+                 episode_len: int = 51) -> Demo:
         """Returns a demo (list of observations)"""
 
         if not self._has_init_task:
@@ -336,8 +338,10 @@ class Scene(object):
                 'No waypoints were found.', self.task)
 
         demo = []
+        self._lens_episode_count = 0
         if record:
             self.pyrep.step()  # Need this here or get_force doesn't work...
+            self._lens_episode_count = self._lens_episode_count + 1
             demo.append(self.get_observation())
         while True:
             success = False
@@ -352,17 +356,17 @@ class Scene(object):
                                     and self.robot.arm.check_arm_collision(s)]
                 [s.set_collidable(False) for s in colliding_shapes]
                 try:
-                    path = point.get_path()
+                    path, is_linear = point.get_path()
                     [s.set_collidable(True) for s in colliding_shapes]
                 except ConfigurationPathError as e:
                     [s.set_collidable(True) for s in colliding_shapes]
                     raise DemoError(
                         'Could not get a path for waypoint %d.' % i,
                         self.task) from e
+                
                 ext = point.get_ext()
                 path.visualize()
                 
-                lens_episode = 1
                 done = False
                 success = False
                 while done != 1:
@@ -370,16 +374,13 @@ class Scene(object):
                     self.step()
                     self._execute_demo_joint_position_action = path.get_executed_joint_position_action()
                     if done == 2:
-                        lens_episode = lens_episode + 1
                         self._demo_record_step(demo, record, callable_each_step)
                     success, term = self.task.success()
                 self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
-                print("the lens of episode:", lens_episode) # 输出episode的长度
-                
+                    
                 point.end_of_path()
-
                 path.clear_visualization()
-
+                    
                 if len(ext) > 0:
                     contains_param = False
                     start_of_bracket = -1
@@ -441,13 +442,26 @@ class Scene(object):
                 success, term = self.task.success()
                 if success:
                     break
-
+                    
         success, term = self.task.success()
-        if not success:
+        
+        print("the lens of episode:", self._lens_episode_count) # 输出episode的长度
+        
+        if not success: 
             raise DemoError('Demo was completed, but was not successful.',
                             self.task)
+        
+        if self._lens_episode_count != episode_len : 
+            raise DemoError('Demo was completed, but was not the set lens of episode.',
+                            self.task)
+        
+        if is_linear == False:
+            raise DemoError('Demo was completed, but was not linear path.',
+                            self.task)
+        
         processed_demo = Demo(demo)
         processed_demo.num_reset_attempts = self._attempts + 1
+                    
         return processed_demo
 
     def get_observation_config(self) -> ObservationConfig:
@@ -460,6 +474,7 @@ class Scene(object):
                 self._workspace_maxz > z > self._workspace_minz)
 
     def _demo_record_step(self, demo_list, record, func):
+        self._lens_episode_count = self._lens_episode_count + 1
         if record:
             demo_list.append(self.get_observation())
         if func is not None:

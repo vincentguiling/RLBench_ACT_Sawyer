@@ -57,7 +57,7 @@ def save_videos(video, dt, video_path=None):
             images = np.concatenate(images, axis=1)
             out.write(images)
         out.release()
-        print(f'Saved video to: {video_path}')
+        # print(f'Saved video to: {video_path}')
     elif isinstance(video, dict):
         cam_names = list(video.keys())
         all_cam_videos = []
@@ -73,7 +73,7 @@ def save_videos(video, dt, video_path=None):
             image = image[:, :, [2, 1, 0]]  # swap B and R channel
             out.write(image)
         out.release()
-        print(f'Saved video to: {video_path}')
+        # print(f'Saved video to: {video_path}')
 
 
 def visualize_joints(qpos_list, command_list, plot_path=None, ylim=None, label_overwrite=None):

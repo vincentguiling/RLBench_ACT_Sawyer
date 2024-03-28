@@ -327,6 +327,7 @@ class Arm(RobotComponent):
             self._ik_group, handles, steps, collision_pairs, joint_options)
         self._ik_target.set_pose(prev_pose)
         if len(ret_floats) == 0:
+            print("ConfigurationPathError")
             raise ConfigurationPathError('Could not create path.')
         return ArmConfigurationPath(self, ret_floats)
 
@@ -403,7 +404,8 @@ class Arm(RobotComponent):
                  max_time_ms: int = 10,
                  trials_per_goal=1,
                  algorithm=Algos.SBL,
-                 relative_to: Object = None
+                 relative_to: Object = None,
+                 get_if_linear=False
                  ) -> ArmConfigurationPath:
         """Tries to get a linear path, failing that tries a non-linear path.
 
@@ -436,6 +438,10 @@ class Arm(RobotComponent):
             p = self.get_linear_path(position, euler, quaternion,
                                      ignore_collisions=ignore_collisions,
                                      relative_to=relative_to)
+            
+            if get_if_linear:
+                is_linear = True
+                return p, True
             return p
         except ConfigurationPathError:
             pass  # Allowed. Try again, but with non-linear.
@@ -445,6 +451,9 @@ class Arm(RobotComponent):
             position, euler, quaternion, ignore_collisions, trials, max_configs,
             distance_threshold, max_time_ms, trials_per_goal, algorithm,
             relative_to)
+        if get_if_linear:
+            is_linear = False
+            return p, is_linear
         return p
 
     def get_tip(self) -> Dummy:

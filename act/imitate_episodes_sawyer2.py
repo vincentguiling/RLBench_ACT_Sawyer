@@ -23,6 +23,8 @@ import IPython
 e = IPython.embed
 
 def main(args):
+    
+    np.set_printoptions(linewidth=200)
     set_seed(1)
     # command line parameters
     is_eval = args['eval']
@@ -179,7 +181,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
-
+    
     # load environment
     if not real_robot:
         from sim_env import make_sim_env
@@ -192,7 +194,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
         num_queries = policy_config['num_queries']
         
     ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.3) # may increase for real-world tasks
+    max_timesteps = int(max_timesteps * 2) # may increase for real-world tasks
     ##########################################################################################################
     
     num_rollouts = 50 # 验证 50 次
@@ -211,12 +213,6 @@ def eval_bc(config, ckpt_name, save_episode=True):
         # 重置帧数
         _, ts_obs = env.reset()
 
-        ### onscreen render
-        if onscreen_render:
-            ax = plt.subplot()
-            plt_img = ax.imshow(env._physics.render(height=480, width=640, camera_id=onscreen_cam))
-            plt.ion()
-
         ### evaluation loop
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
@@ -227,23 +223,23 @@ def eval_bc(config, ckpt_name, save_episode=True):
         target_qpos_list = []
         rewards = []
         with torch.inference_mode():
+            
+            
             path = []
-            for t in range(max_timesteps): # 最大帧数
-                ### update onscreen render and wait for DT
-                if onscreen_render:
-                    image = env._physics.render(height=480, width=640, camera_id=onscreen_cam)
-                    plt_img.set_data(image)
-                    plt.pause(DT)
-
+            t = 0
+            for timestep in range(max_timesteps): # 最大帧数
                 obs = ts_obs
-                image_list.append({'wrist':obs.wrist_rgb})
+                if(rollout_id/5 == 0): # 限制保存数量，增快速度
+                    image_list.append({'wrist':obs.wrist_rgb})
+                
                 # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                     
                 qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8
                 qpos = pre_process(qpos_numpy)
+                # qpos = qpos_numpy
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
-                curr_image = get_image(ts_obs, camera_names) # 获取帧数据的图像
+                curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
                 ### query policy
                 if config['policy_class'] == "ACT":
@@ -259,7 +255,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                         actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
                         actions_for_curr_step = actions_for_curr_step[actions_populated]
                         ############################################################################################################################################
-                        k = 0.25
+                        k = 0.01
                         ############################################################################################################################################
                         exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
                         exp_weights = exp_weights / exp_weights.sum() # 做了一个归一化
@@ -274,22 +270,18 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     raw_action = policy(qpos, curr_image) 
                 else:
                     raise NotImplementedError
-
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action) # 又对预测出来的动作做了一不处理
                 target_qpos = action
                 
-                next_gripper_position = action[0:3]
-                next_gripper_quaternion = action[3:7]
-                ### step the environment
-                
-                # ts_obs, reward, _ = env.step(target_qpos) # 原关节轨迹
                 try:
+                    next_gripper_position = action[0:3] # next 
+                    next_gripper_quaternion = action[3:7]
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm))
-                    # path.append(env._robot.arm.get_path(position=next_gripper_position, quaternion=next_gripper_quaternion, relative_to=env._robot.arm))
+                    # print("steps: ", t, end=' ')
                     path[t].visualize() # 在仿真环境中画出轨迹
-                
+                    
                     done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了
                     while done != 1: # 如果 done 是 False 则执行
                         done = path[t].step() # ArmConfigurationPath类型的step运行载入下一帧动作
@@ -297,17 +289,47 @@ def eval_bc(config, ckpt_name, save_episode=True):
                         
                     ts_obs = env._scene.get_observation()
                     reward, _ = env._task.success() # 任务是否完成状态读取
-
-                    ### for visualization
                     qpos_list.append(qpos_numpy)
                     target_qpos_list.append(target_qpos)
                     rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                     if reward >= 1 :
-                        print("reward >= 1")
                         break
-                except ConfigurationPathError:
-                    print("ConfigurationPathError")
+                except ConfigurationPathError: 
                     break # 跳出推理循环
+                
+                    print("ConfigurationPathError ", t, "path lens: ",len(path))
+                    # 不跳出，而是前面的2/3步数。在相同的观测下面有相同的推理？？？，不是，是反复迭代退回了
+                    # np.random.seed(0)
+                    t_back = (t*8)//10
+                    
+                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_qpos_list[t_back][:7]]
+                    for i in range(t - t_back):
+                        path.pop()
+                        qpos_list.pop()
+                        target_qpos_list.pop()
+                    t = t_back
+                        
+                    # back_gripper_pose = target_qpos_list[(t*9)//10][:7]
+                    next_gripper_position = back_gripper_pose[0:3] # next 
+                    next_gripper_quaternion = back_gripper_pose[3:7]
+                    try:
+                        # path.pop()
+                        path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
+                        path[t].visualize() # 在仿真环境中画出轨迹
+                        
+                        done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了
+                        while done != 1: # 如果 done 是 False 则执行
+                            done = path[t].step() # ArmConfigurationPath类型的step运行载入下一帧动作
+                            env._scene.step() # Scene 步进
+                            
+                        ts_obs = env._scene.get_observation()
+                        qpos_list.append(qpos_numpy)
+                        target_qpos_list.append(target_qpos)    
+                        
+                    except ConfigurationPathError:
+                        print("ConfigurationPathError ConfigurationPathError")
+                        break # 跳出推理循环
+                t = t + 1
                 
             plt.close()
             
@@ -319,10 +341,11 @@ def eval_bc(config, ckpt_name, save_episode=True):
         episode_returns.append(episode_return)
         episode_highest_reward = np.max(rewards)
         highest_rewards.append(episode_highest_reward)
-        print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
-
-        if save_episode:
-            save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video{rollout_id}.mp4'))
+        # print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
+        print(f'{rollout_id} Rollout with {t} steps : {episode_highest_reward==env_max_reward}')
+        if(rollout_id/5 == 0): # 限制保存数量，增快速度
+            if save_episode:
+                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video{rollout_id}.mp4'))
 
     success_rate = np.mean(np.array(highest_rewards) == env_max_reward) # 计算占比
     avg_return = np.mean(episode_returns) # 计算平均数
@@ -426,10 +449,10 @@ def train_bc(train_dataloader, val_dataloader, config):
         # print(summary_string)
 
         # 2.4. save the weight file
-        if epoch % 100 == 0: # 100个epoch保存一个权重文件
-            ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
-            torch.save(policy.state_dict(), ckpt_path)
-            plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
+        # if epoch % 100 == 0: # 100个epoch保存一个权重文件
+        #     ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
+        #     torch.save(policy.state_dict(), ckpt_path)
+        #     plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
     
     ckpt_path = os.path.join(ckpt_dir, f'policy_last.ckpt')
     torch.save(policy.state_dict(), ckpt_path)

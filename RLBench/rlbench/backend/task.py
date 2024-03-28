@@ -357,7 +357,7 @@ class Task(object):
         for i, point in enumerate(waypoints):
             path = None
             try:
-                path = point.get_path(ignore_collisions=True)
+                path, is_linear = point.get_path(ignore_collisions=True)
             except ConfigurationPathError as err:
                 pass
             if path is None:

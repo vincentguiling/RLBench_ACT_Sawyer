@@ -48,11 +48,15 @@ def make_sim_env(task_name):
     # obs_config.head_camera.image_size = img_size
     obs_config.front_camera.image_size = img_size
     
+    headless_val = False
+    if socket.gethostname() != 'XJ':
+        headless_val = True
+        
     # 2. 启动环境
     rlbench_env = Environment(
         action_mode=MoveArmThenGripper(JointPosition(), Discrete()),
         obs_config=obs_config,
-        headless=False,
+        headless=headless_val,
         robot_setup='sawyer'
         )
     print(rlbench_env)

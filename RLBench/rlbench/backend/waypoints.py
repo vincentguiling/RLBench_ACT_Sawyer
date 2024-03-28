@@ -51,16 +51,18 @@ class Point(Waypoint):
                                 euler=self._waypoint.get_orientation(),
                                 ignore_collisions=(self._ignore_collisions or
                                                    ignore_collisions))
+            is_linear = True
         else:
-            path = arm.get_path(self._waypoint.get_position(),
+            path, is_linear = arm.get_path(self._waypoint.get_position(),
                                 euler=self._waypoint.get_orientation(),
                                 ignore_collisions=(self._ignore_collisions or
                                                    ignore_collisions),
                                 trials=100,
                                 max_configs=10,
                                 trials_per_goal=10,
-                                algorithm=Algos.RRTConnect)
-        return path
+                                algorithm=Algos.RRTConnect,
+                                get_if_linear=True)
+        return path, is_linear
 
 
 class PredefinedPath(Waypoint):

@@ -27,7 +27,7 @@ cup = Shape('Cup')
 waypoints = [Dummy('waypoint%d' % i) for i in range(7)]
 
 print('Planning path for left arm to cup ...')
-path = baxter_left.get_path(position=waypoints[0].get_position(),
+path, = baxter_left.get_path(position=waypoints[0].get_position(),
                             quaternion=waypoints[0].get_quaternion())
 path.visualize()  # Let's see what the path looks like
 print('Executing plan ...')
