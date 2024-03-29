@@ -6,10 +6,10 @@ python3 RLBench/tools/task_builder_sawyer.py --task reach_target_sawyer4
 
 # 演示数据集生成    
 python3 RLBench/tools/dataset_generator_sawyer_act2.py \
-    --save_path Datasets2 \
+    --save_path Datasets \
     --tasks reach_target_sawyer4 \
     --variations 1 \
-    --episodes_per_task 3 \
+    --episodes_per_task 50 \
     --episode_len 51
     
 # 数据集可视化

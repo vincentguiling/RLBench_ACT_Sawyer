@@ -3,13 +3,13 @@
 # 生产新的数据，里面没有nolinear
 python3 RLBench/tools/dataset_generator_sawyer_act2.py \
     --save_path Datasets \
-    --tasks reach_target_sawyer2 \
+    --tasks reach_target_sawyer4 \
     --variations 1 \
     --episodes_per_task 50 \
     --episode_len 51
     
-epoch_list=(1000 2000 3000)
-batch_size=(16)
+epoch_list=(1000 2000 3000 4000)
+batch_size=(8 16)
 for batch in ${batch_size[@]}
   do
   for epoch in ${epoch_list[@]}
