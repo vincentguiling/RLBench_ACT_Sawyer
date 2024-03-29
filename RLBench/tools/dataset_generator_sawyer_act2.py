@@ -75,12 +75,18 @@ def save_demo(demo, example_path, ex_idx):
         if i != 0: # action是下一步的姿态
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
             
-        data_dict['/observations/images/wrist'].append(obs.wrist_rgb*255)
+        data_dict['/observations/images/wrist'].append(obs.wrist_rgb*255) # 480， 640， 3
         # wrist_depth = obs.wrist_depth *1000 / 255
         
-        wrist_depth = np.clip((obs.wrist_depth * 255. * 4.0), 0, 255).astype(np.uint8) 
+        # wrist_depth = np.clip((obs.wrist_depth * 255. * 20.0), 0, 255).astype(np.uint8) 
+        # wrist_depth = np.expand_dims(wrist_depth,2).repeat(3,axis=2)# 统一处理三个维度相同的值
+        # wrist_depth1 = np.clip((np.sum(obs.wrist_rgb,2)), 0, 255).astype(np.uint8)  # 加一层颜色层
         
-        wrist_depth = np.expand_dims(wrist_depth,2).repeat(3,axis=2)# 统一处理三个维度相同的值
+        wrist_depth3 = np.clip(((obs.wrist_depth * 255.) * 8.0), 0, 255).astype(np.uint8) 
+        wrist_depth2 = np.clip(((obs.wrist_depth * 255.) * 4.0 ), 0, 255).astype(np.uint8) 
+        wrist_depth1 = np.clip(((obs.wrist_depth * 255.) * 1.0 ), 0, 255).astype(np.uint8) 
+        
+        wrist_depth = np.stack((wrist_depth1, wrist_depth2, wrist_depth3),axis=2)
         
         data_dict['/observations/images/wrist_depth'].append(wrist_depth)
         # print("obs.gripper_matrix:", obs.gripper_matrix)
@@ -128,7 +134,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
     
-    headless_val = True
+    headless_val = False
     if socket.gethostname() != 'XJ':
         headless_val = True
     

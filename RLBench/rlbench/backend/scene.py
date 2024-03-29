@@ -336,7 +336,7 @@ class Scene(object):
         if len(waypoints) == 0:
             raise NoWaypointsError(
                 'No waypoints were found.', self.task)
-
+        
         demo = []
         self._lens_episode_count = 0
         if record:
@@ -345,11 +345,12 @@ class Scene(object):
                 self._lens_episode_count = self._lens_episode_count + 1
                 demo.append(self.get_observation())
                 
+                
         while True:
             success = False
             for i, point in enumerate(waypoints):
                 
-                if i > 0:
+                if len(waypoints) > 1 and i == 1:
                     self._lens_episode_count = self._lens_episode_count + 1
                     demo.append(self.get_observation())
                 
@@ -383,8 +384,9 @@ class Scene(object):
                     if done == 2 and (i > 0 or len(waypoints) == 1): # 不保留第一个随机手臂位置
                         self._demo_record_step(demo, record, callable_each_step)
                     success, term = self.task.success()
-                if i > 0:
+                if i > 0 or len(waypoints) == 1:
                     self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
+                    print("len(waypoints):",len(waypoints))
                 
                 # print(f"point {i} has reach, success = {success}, done = {done}") # success is for task not for waypoint, maybe the done is for waypoint 
                 

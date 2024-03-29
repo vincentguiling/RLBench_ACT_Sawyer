@@ -40,6 +40,7 @@ def make_sim_env(task_name):
     
     # 1. 设置仿真环境的配置文件
     img_size = [640,480] # 图片格式大小
+    
     obs_config = ObservationConfig()
     obs_config.set_all(False)
     obs_config.wrist_camera.set_all(True)
@@ -69,6 +70,6 @@ def make_sim_env(task_name):
     task_class = task_file_to_task_class(task_name)
     task_env = rlbench_env.get_task(task_class) # Type[Task]) -> TaskEnvironment（include scene）
     var_target = task_env.variation_count()
-    descriptions, _ = task_env.reset()
+    # descriptions, _ = task_env.reset()
     
     return task_env

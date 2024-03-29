@@ -6,8 +6,11 @@ from pyrep import PyRep
 from pyrep.const import ObjectType
 from rlbench import utils
 from rlbench.action_modes.action_mode import ActionMode
+
+from pyrep.errors import ConfigurationPathError
 from rlbench.backend.exceptions import BoundaryError, WaypointError, \
-    TaskEnvironmentError
+    TaskEnvironmentError, NoWaypointsError, DemoError
+
 from rlbench.backend.observation import Observation
 from rlbench.backend.robot import Robot
 from rlbench.backend.scene import Scene
@@ -87,6 +90,30 @@ class TaskEnvironment(object):
 
         self._reset_called = True
         # Returns a list of descriptions and the first observation
+        
+        ####################################################################################################################################
+        # 每次初始化之后先到第一个waypoint
+        waypoints = self._scene.task.get_waypoints()
+        if len(waypoints) == 0:
+            raise NoWaypointsError('No waypoint0 were found.', self._task)
+        
+        if len(waypoints) > 1:
+            for i, point in enumerate(waypoints):
+                point.start_of_path()
+                try:
+                    path, _ = point.get_path()
+                except ConfigurationPathError as e:
+                    raise DemoError('Could not get a path for waypoint %d.' % i, self._task) from e
+                
+                done = False
+                while done != 1:
+                    done = path.step()
+                    self._scene.step()
+                    self._scene._execute_demo_joint_position_action = path.get_executed_joint_position_action()
+                    
+                point.end_of_path()
+                break
+
         return desc, self._scene.get_observation()
 
     def get_observation(self) -> Observation:

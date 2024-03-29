@@ -9,13 +9,9 @@ import numpy as np
 from rlbench.backend.spawn_boundary import SpawnBoundary
 
 
-class ReachTargetSawyer3(Task):
+class ReachTargetSawyer4(Task):
 
     def init_task(self) -> None:
-        # 手臂随机初始化点
-        self.arm_pose = Dummy('waypoint0')
-        self.arm_boundary = Shape('arm_boundary')
-        
         # 添加目标：
         self.target_block = Shape('target_block')
         
@@ -47,9 +43,6 @@ class ReachTargetSawyer3(Task):
         boundary_spawn = SpawnBoundary([self.boundary])
         for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
             boundary_spawn.sample(ob, min_distance=0.2, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0))
-        
-        arm_boundary_spawn = SpawnBoundary([self.arm_boundary])
-        arm_boundary_spawn.sample(self.arm_pose, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0))
         
         return ['grasp the %s target' % color_name,
                 'grasp the %s thing' % color_name]  # 可以用nlp来处理
