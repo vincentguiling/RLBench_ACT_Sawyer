@@ -1,6 +1,7 @@
 import pathlib
 
-### Task parameters
+### Task parameters 
+
 DATA_DIR = 'Datasets'
 SIM_TASK_CONFIGS = {
     'reach_target_sawyer':{
@@ -14,6 +15,18 @@ SIM_TASK_CONFIGS = {
         'num_episodes': 50,
         'episode_len': 51,
         'camera_names': ['wrist']
+    },
+    'reach_target_sawyer3':{ 
+        'dataset_dir': DATA_DIR + '/reach_target_sawyer3/variation0', ## 有一次名字忘记改了
+        'num_episodes': 50,
+        'episode_len': 37,
+        'camera_names': ['wrist']
+    },
+    'reach_target_sawyer4':{ 
+        'dataset_dir': DATA_DIR + '/reach_target_sawyer4/variation0',
+        'num_episodes': 50,
+        'episode_len': 37,
+        'camera_names': ['wrist','wrist_depth']
     },
 
 }

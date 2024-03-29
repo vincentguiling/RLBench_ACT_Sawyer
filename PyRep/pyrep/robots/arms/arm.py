@@ -282,7 +282,7 @@ class Arm(RobotComponent):
     def get_linear_path(self, position: Union[List[float], np.ndarray],
                         euler: Union[List[float], np.ndarray] = None,
                         quaternion: Union[List[float], np.ndarray] = None,
-                        steps=50, ignore_collisions=False,
+                        steps=36, ignore_collisions=False,
                         relative_to: Object = None) -> ArmConfigurationPath:
         """Gets a linear configuration path given a target pose.
 
@@ -327,7 +327,7 @@ class Arm(RobotComponent):
             self._ik_group, handles, steps, collision_pairs, joint_options)
         self._ik_target.set_pose(prev_pose)
         if len(ret_floats) == 0:
-            print("ConfigurationPathError")
+            # print("ConfigurationPathError")
             raise ConfigurationPathError('Could not create path.')
         return ArmConfigurationPath(self, ret_floats)
 

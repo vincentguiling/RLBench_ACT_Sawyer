@@ -142,12 +142,15 @@ def make_optimizer(policy_class, policy):
         raise NotImplementedError
     return optimizer
 
-def get_image(ts, camera_names):
+def get_image(ts, camera_names): # 推理的时候采用到
     curr_images = []
-    # curr_image = rearrange(ts.head_rgb, 'h w c -> c h w')
-    # curr_images.append(curr_image)
+
     curr_image = rearrange(ts.wrist_rgb, 'h w c -> c h w')
     curr_images.append(curr_image)    
+    
+    if(len(camera_names) == 2):
+        curr_image = rearrange(ts.wrist_depth, 'h w c -> c h w')
+        curr_images.append(curr_image)
         
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
@@ -223,13 +226,11 @@ def eval_bc(config, ckpt_name, save_episode=True):
         target_qpos_list = []
         rewards = []
         with torch.inference_mode():
-            
-            
             path = []
             t = 0
             for timestep in range(max_timesteps): # 最大帧数
                 obs = ts_obs
-                if(rollout_id/5 == 0): # 限制保存数量，增快速度
+                if(rollout_id%5 == 0): # 限制保存数量，增快速度
                     image_list.append({'wrist':obs.wrist_rgb})
                 
                 # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
@@ -295,9 +296,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     if reward >= 1 :
                         break
                 except ConfigurationPathError: 
+                    print("ConfigurationPathError ", t) # , "path lens: ",len(path))
                     break # 跳出推理循环
-                
-                    print("ConfigurationPathError ", t, "path lens: ",len(path))
+
                     # 不跳出，而是前面的2/3步数。在相同的观测下面有相同的推理？？？，不是，是反复迭代退回了
                     # np.random.seed(0)
                     t_back = (t*8)//10
@@ -335,7 +336,6 @@ def eval_bc(config, ckpt_name, save_episode=True):
             
         # for i in range(t+1): # clear the path history
         #     path[i].clear_visualization()
-        print(t,"steps has inference")
         rewards = np.array(rewards) # 
         episode_return = np.sum(rewards[rewards!=None])
         episode_returns.append(episode_return)
@@ -343,7 +343,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
         highest_rewards.append(episode_highest_reward)
         # print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
         print(f'{rollout_id} Rollout with {t} steps : {episode_highest_reward==env_max_reward}')
-        if(rollout_id/5 == 0): # 限制保存数量，增快速度
+        if(rollout_id%5 == 0): # 限制保存数量，增快速度
             if save_episode:
                 save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video{rollout_id}.mp4'))
 

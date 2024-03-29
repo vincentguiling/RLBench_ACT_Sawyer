@@ -322,7 +322,7 @@ class Scene(object):
     def get_demo(self, record: bool = True,
                  callable_each_step: Callable[[Observation], None] = None,
                  randomly_place: bool = True,
-                 episode_len: int = 51) -> Demo:
+                 episode_len: int = 0) -> Demo:
         """Returns a demo (list of observations)"""
 
         if not self._has_init_task:
@@ -341,11 +341,18 @@ class Scene(object):
         self._lens_episode_count = 0
         if record:
             self.pyrep.step()  # Need this here or get_force doesn't work...
-            self._lens_episode_count = self._lens_episode_count + 1
-            demo.append(self.get_observation())
+            if len(waypoints) == 1: # 如果只有单一的waypoint
+                self._lens_episode_count = self._lens_episode_count + 1
+                demo.append(self.get_observation())
+                
         while True:
             success = False
             for i, point in enumerate(waypoints):
+                
+                if i > 0:
+                    self._lens_episode_count = self._lens_episode_count + 1
+                    demo.append(self.get_observation())
+                
                 point.start_of_path()
                 if point.skip:
                     continue
@@ -373,11 +380,14 @@ class Scene(object):
                     done = path.step()
                     self.step()
                     self._execute_demo_joint_position_action = path.get_executed_joint_position_action()
-                    if done == 2:
+                    if done == 2 and (i > 0 or len(waypoints) == 1): # 不保留第一个随机手臂位置
                         self._demo_record_step(demo, record, callable_each_step)
                     success, term = self.task.success()
-                self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
-                    
+                if i > 0:
+                    self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
+                
+                # print(f"point {i} has reach, success = {success}, done = {done}") # success is for task not for waypoint, maybe the done is for waypoint 
+                
                 point.end_of_path()
                 path.clear_visualization()
                     
@@ -428,6 +438,7 @@ class Scene(object):
                             gripper.grasp(g_obj)
 
                     self._demo_record_step(demo, record, callable_each_step)
+                    
 
             if not self.task.should_repeat_waypoints() or success:
                 break
@@ -451,7 +462,7 @@ class Scene(object):
             raise DemoError('Demo was completed, but was not successful.',
                             self.task)
         
-        if self._lens_episode_count != episode_len : 
+        if episode_len != 0 and self._lens_episode_count != episode_len : 
             raise DemoError('Demo was completed, but was not the set lens of episode.',
                             self.task)
         

@@ -42,8 +42,8 @@ flags.DEFINE_integer('episodes_per_task', 10,
                      'The number of episodes to collect per task.')
 flags.DEFINE_integer('variations', -1,
                      'Number of variations to collect per task. -1 for all.')
-flags.DEFINE_integer('episode_len', 51,
-                     'the lenght of one episode, means how many steps of one episode.')
+flags.DEFINE_integer('episode_len', 0,
+                     'the lenght of one episode, means how many steps of one episode. if not assign, not strict for the steps of generate')
 
 np.set_printoptions(linewidth=200)
 
@@ -65,6 +65,7 @@ def save_demo(demo, example_path, ex_idx):
     data_dict = {
         '/action': [], 
         '/observations/images/wrist': [],
+        '/observations/images/wrist_depth': [],
         '/observations/gpos': [],
         '/observations/qpos': [],
     }
@@ -74,7 +75,14 @@ def save_demo(demo, example_path, ex_idx):
         if i != 0: # action是下一步的姿态
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
             
-        data_dict['/observations/images/wrist'].append(obs.wrist_rgb)
+        data_dict['/observations/images/wrist'].append(obs.wrist_rgb*255)
+        # wrist_depth = obs.wrist_depth *1000 / 255
+        
+        wrist_depth = np.clip((obs.wrist_depth * 255. * 4.0), 0, 255).astype(np.uint8) 
+        
+        wrist_depth = np.expand_dims(wrist_depth,2).repeat(3,axis=2)# 统一处理三个维度相同的值
+        
+        data_dict['/observations/images/wrist_depth'].append(wrist_depth)
         # print("obs.gripper_matrix:", obs.gripper_matrix)
         data_dict['/observations/gpos'].append(np.append(obs.gripper_pose, obs.gripper_open))
         data_dict['/observations/qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
@@ -89,14 +97,14 @@ def save_demo(demo, example_path, ex_idx):
         obs = root.create_group('observations')
         image = obs.create_group('images')
         image.create_dataset('wrist', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
+        image.create_dataset('wrist_depth', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
         gpos = obs.create_dataset('gpos', (max_timesteps, 8))
         qpos = obs.create_dataset('qpos', (max_timesteps, 8))
         
         for name, array in data_dict.items():
             root[name][...] = array
         print("demo save successfully")
-            
-            
+                     
 def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     """Each thread will choose one task and variation, and then gather
     all the episodes_per_task for that variation."""
@@ -106,9 +114,11 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     num_tasks = len(tasks)
     img_size = list(map(int, FLAGS.image_size))
     obs_config = ObservationConfig()
+    
     obs_config.set_all(False)
     obs_config.wrist_camera.set_all(True)
     obs_config.set_all_low_dim(True)
+    
     obs_config.wrist_camera.image_size = img_size
 
     # obs_config.wrist_camera.depth_in_meters = False
@@ -118,18 +128,18 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
     
-    headless_val = False
+    headless_val = True
     if socket.gethostname() != 'XJ':
         headless_val = True
     
-    #############################################################################################################################################
+    ##############################################################################################################
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
         action_mode=MoveArmThenGripper(JointVelocity(), Discrete()),
         obs_config=obs_config,
         headless=headless_val,
         robot_setup='sawyer'
         )
-    #############################################################################################################################################
+    ##############################################################################################################
     
     rlbench_env.launch()
     task_env = None
@@ -234,5 +244,6 @@ def main(argv):
     print('Data collection done!')
     for i in range(FLAGS.processes):
         print(result_dict[i])
+        
 if __name__ == '__main__':
   app.run(main)
