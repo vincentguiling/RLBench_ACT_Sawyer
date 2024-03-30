@@ -44,13 +44,13 @@ class Waypoint(object):
 
 class Point(Waypoint):
 
-    def get_path(self, ignore_collisions=False) -> ArmConfigurationPath:
+    def get_path(self, ignore_collisions=False, steps=50) -> ArmConfigurationPath:
         arm = self._robot.arm
         if self._linear_only:
             path = arm.get_linear_path(self._waypoint.get_position(),
                                 euler=self._waypoint.get_orientation(),
-                                ignore_collisions=(self._ignore_collisions or
-                                                   ignore_collisions))
+                                ignore_collisions=(self._ignore_collisions or ignore_collisions),
+                                steps=steps)
             is_linear = True
         else:
             path, is_linear = arm.get_path(self._waypoint.get_position(),
@@ -61,7 +61,8 @@ class Point(Waypoint):
                                 max_configs=10,
                                 trials_per_goal=10,
                                 algorithm=Algos.RRTConnect,
-                                get_if_linear=True)
+                                get_if_linear=True,
+                                steps=steps)
         return path, is_linear
 
 

@@ -341,18 +341,10 @@ class Scene(object):
         self._lens_episode_count = 0
         if record:
             self.pyrep.step()  # Need this here or get_force doesn't work...
-            if len(waypoints) == 1: # 如果只有单一的waypoint
-                self._lens_episode_count = self._lens_episode_count + 1
-                demo.append(self.get_observation())
-                
                 
         while True:
             success = False
             for i, point in enumerate(waypoints):
-                
-                if len(waypoints) > 1 and i == 1:
-                    self._lens_episode_count = self._lens_episode_count + 1
-                    demo.append(self.get_observation())
                 
                 point.start_of_path()
                 if point.skip:
@@ -363,8 +355,20 @@ class Scene(object):
                                     and s not in self._robot_shapes and s.is_collidable()
                                     and self.robot.arm.check_arm_collision(s)]
                 [s.set_collidable(False) for s in colliding_shapes]
+                
+                ext = point.get_ext()
+                no_record = 'no_record(' in ext
+                if not no_record: 
+                    self._lens_episode_count = self._lens_episode_count + 1
+                    demo.append(self.get_observation())
+                
                 try:
-                    path, is_linear = point.get_path()
+                    if len(ext) > 0 and 'steps(' in ext:
+                        steps_len = int(ext[ext.index('steps(') + 6])
+                        path, is_linear = point.get_path(steps=steps_len)
+                    else:
+                        path, is_linear = point.get_path()
+                        
                     [s.set_collidable(True) for s in colliding_shapes]
                 except ConfigurationPathError as e:
                     [s.set_collidable(True) for s in colliding_shapes]
@@ -372,23 +376,20 @@ class Scene(object):
                         'Could not get a path for waypoint %d.' % i,
                         self.task) from e
                 
-                ext = point.get_ext()
                 path.visualize()
-                
                 done = False
                 success = False
                 while done != 1:
                     done = path.step()
                     self.step()
                     self._execute_demo_joint_position_action = path.get_executed_joint_position_action()
-                    if done == 2 and (i > 0 or len(waypoints) == 1): # 不保留第一个随机手臂位置
+                    if done == 2 and (not no_record): # 不保留第一个随机手臂位置
                         self._demo_record_step(demo, record, callable_each_step)
                     success, term = self.task.success()
-                if i > 0 or len(waypoints) == 1:
+                if not no_record:
                     self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
-                    print("len(waypoints):",len(waypoints))
                 
-                # print(f"point {i} has reach, success = {success}, done = {done}") # success is for task not for waypoint, maybe the done is for waypoint 
+                print(f"point {i} has reached with {self._lens_episode_count} steps, success = {success}, done = {done}") # success is for task not for waypoint, maybe the done is for waypoint 
                 
                 point.end_of_path()
                 path.clear_visualization()

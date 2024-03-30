@@ -405,7 +405,8 @@ class Arm(RobotComponent):
                  trials_per_goal=1,
                  algorithm=Algos.SBL,
                  relative_to: Object = None,
-                 get_if_linear=False
+                 get_if_linear=False,
+                 steps=50
                  ) -> ArmConfigurationPath:
         """Tries to get a linear path, failing that tries a non-linear path.
 
@@ -437,7 +438,8 @@ class Arm(RobotComponent):
         try:
             p = self.get_linear_path(position, euler, quaternion,
                                      ignore_collisions=ignore_collisions,
-                                     relative_to=relative_to)
+                                     relative_to=relative_to,
+                                     steps=steps)
             
             if get_if_linear:
                 is_linear = True

@@ -48,7 +48,7 @@ def main(args):
     # fixed parameters
     state_dim = 8 # 左右机械臂，一共7*2 = 14,7+1
     lr_backbone = 1e-5
-    backbone = 'resnet18' # 图像基础处理网络是ResNet18
+    backbone = 'resnet34' # 图像基础处理网络是ResNet18
     if policy_class == 'ACT':
         enc_layers = 4
         dec_layers = 7
@@ -142,21 +142,17 @@ def make_optimizer(policy_class, policy):
         raise NotImplementedError
     return optimizer
 
+from rlbench.backend.utils import float_array_to_rgb_image
+from rlbench.backend.const import DEPTH_SCALE
 def get_image(ts, camera_names): # 推理的时候采用到
     curr_images = []
-
+    
     curr_image = rearrange(ts.wrist_rgb, 'h w c -> c h w')
     curr_images.append(curr_image)    
     
     if(len(camera_names) == 2):
-        # wrist_depth = np.clip((ts.wrist_depth * 255. * 4.0), 0, 255).astype(np.uint8) 
-        # wrist_depth = np.expand_dims(wrist_depth,2).repeat(3,axis=2)# 统一处理三个维度相同的值
-        wrist_depth3 = np.clip(((ts.wrist_depth * 255.) * 4.0), 0, 255).astype(np.uint8) 
-        wrist_depth2 = np.clip(((ts.wrist_depth * 255.) * 4.0 ), 0, 255).astype(np.uint8) 
-        wrist_depth1 = np.clip(((ts.wrist_depth * 255.) * 4.0 ), 0, 255).astype(np.uint8) 
-        # wrist_depth2 = np.clip(ts.wrist_rgb[:,:,1], 0, 255).astype(np.uint8) 
-        # wrist_depth1 = np.clip(ts.wrist_rgb[:,:,0], 0, 255).astype(np.uint8)  # 加一层颜色层
-        wrist_depth = np.stack((wrist_depth1, wrist_depth2, wrist_depth3),axis=2)
+        wrist_depth = float_array_to_rgb_image(ts.wrist_depth, scale_factor=DEPTH_SCALE)
+        wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
         
         curr_image = rearrange(wrist_depth, 'h w c -> c h w')
         curr_images.append(curr_image)

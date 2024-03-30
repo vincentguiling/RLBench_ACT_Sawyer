@@ -41,8 +41,9 @@ class ReachTargetSawyer2(Task):
         
         boundary_spawn = SpawnBoundary([self.boundary])
         for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-            boundary_spawn.sample(ob, min_distance=0.2, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0))
-        
+            boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, -0.785), max_rotation=(0, 0, 0.785))
+            # boundary_spawn.sample(ob, min_distance=0.2, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0))
+            
         return ['grasp the %s target' % color_name,
                 'grasp the %s thing' % color_name]  # 可以用nlp来处理
     

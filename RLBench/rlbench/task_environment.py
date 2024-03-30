@@ -94,24 +94,28 @@ class TaskEnvironment(object):
         ####################################################################################################################################
         # 每次初始化之后先到第一个waypoint
         waypoints = self._scene.task.get_waypoints()
+                  
         if len(waypoints) == 0:
             raise NoWaypointsError('No waypoint0 were found.', self._task)
         
         if len(waypoints) > 1:
             for i, point in enumerate(waypoints):
-                point.start_of_path()
-                try:
-                    path, _ = point.get_path()
-                except ConfigurationPathError as e:
-                    raise DemoError('Could not get a path for waypoint %d.' % i, self._task) from e
-                
-                done = False
-                while done != 1:
-                    done = path.step()
-                    self._scene.step()
-                    self._scene._execute_demo_joint_position_action = path.get_executed_joint_position_action()
+                ext = point.get_ext()
+                no_record = 'no_record(' in ext
+                if(no_record):
+                    point.start_of_path()
+                    try:
+                        path, _ = point.get_path()
+                    except ConfigurationPathError as e:
+                        raise DemoError('Could not get a path for waypoint %d.' % i, self._task) from e
                     
-                point.end_of_path()
+                    done = False
+                    while done != 1:
+                        done = path.step()
+                        self._scene.step()
+                        self._scene._execute_demo_joint_position_action = path.get_executed_joint_position_action()
+                        
+                    point.end_of_path()
                 break
 
         return desc, self._scene.get_observation()
