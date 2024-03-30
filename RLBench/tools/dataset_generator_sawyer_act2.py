@@ -74,7 +74,8 @@ def save_demo(demo, example_path, ex_idx):
     for i, obs in enumerate(demo): 
         if i != 0: # action是下一步的姿态
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
-            
+        
+        
         data_dict['/observations/images/wrist'].append(obs.wrist_rgb*255) # 480， 640， 3
         # wrist_depth = obs.wrist_depth *1000 / 255
         
@@ -82,9 +83,11 @@ def save_demo(demo, example_path, ex_idx):
         # wrist_depth = np.expand_dims(wrist_depth,2).repeat(3,axis=2)# 统一处理三个维度相同的值
         # wrist_depth1 = np.clip((np.sum(obs.wrist_rgb,2)), 0, 255).astype(np.uint8)  # 加一层颜色层
         
-        wrist_depth3 = np.clip(((obs.wrist_depth * 255.) * 8.0), 0, 255).astype(np.uint8) 
+        wrist_depth3 = np.clip(((obs.wrist_depth * 255.) * 4.0), 0, 255).astype(np.uint8) 
         wrist_depth2 = np.clip(((obs.wrist_depth * 255.) * 4.0 ), 0, 255).astype(np.uint8) 
-        wrist_depth1 = np.clip(((obs.wrist_depth * 255.) * 1.0 ), 0, 255).astype(np.uint8) 
+        wrist_depth1 = np.clip(((obs.wrist_depth * 255.) * 4.0 ), 0, 255).astype(np.uint8) 
+        # wrist_depth2 = np.clip(obs.wrist_rgb[:,:,1], 0, 255).astype(np.uint8) 
+        # wrist_depth1 = np.clip(obs.wrist_rgb[:,:,0], 0, 255).astype(np.uint8)  # 加一层颜色层
         
         wrist_depth = np.stack((wrist_depth1, wrist_depth2, wrist_depth3),axis=2)
         
