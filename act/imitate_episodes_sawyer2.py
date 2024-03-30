@@ -48,7 +48,7 @@ def main(args):
     # fixed parameters
     state_dim = 8 # 左右机械臂，一共7*2 = 14,7+1
     lr_backbone = 1e-5
-    backbone = 'resnet34' # 图像基础处理网络是ResNet18
+    backbone = 'resnet18' # 图像基础处理网络是ResNet18
     if policy_class == 'ACT':
         enc_layers = 4
         dec_layers = 7
