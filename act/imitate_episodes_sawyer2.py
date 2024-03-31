@@ -11,7 +11,6 @@ from einops import rearrange
 from constants import DT
 from constants import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # data functions
-from utils import sample_box_pose, sample_insertion_pose # robot functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from policy import ACTPolicy, CNNMLPPolicy
 from visualize_episodes import save_videos
@@ -34,7 +33,10 @@ def main(args):
     batch_size_train = args['batch_size'] # train 和 eval 使用相同的 batch_size
     batch_size_val = args['batch_size']
     num_epochs = args['num_epochs']
+    num_verification = args['num_verification']
 
+    print("num_verification:", num_verification)
+    
     is_sim = True 
     if is_sim:
         from constants import SIM_TASK_CONFIGS
@@ -48,7 +50,10 @@ def main(args):
     # fixed parameters
     state_dim = 8 # 左右机械臂，一共7*2 = 14,7+1
     lr_backbone = 1e-5
-    backbone = 'resnet34' # 图像基础处理网络是ResNet18
+    
+    backbone = args['backbone']
+    print("backbone:",backbone)
+    # backbone = 'resnet18' # 图像基础处理网络是ResNet18
     if policy_class == 'ACT':
         enc_layers = 4
         dec_layers = 7
@@ -74,7 +79,7 @@ def main(args):
     # 增加参数保存
     chunk_size = args['chunk_size']
     batch_size = args['batch_size']
-    ckpt_dir = args['ckpt_dir'] + f'/{task_name}/{num_episodes}demo_{episode_len}step_{chunk_size}chunk_{num_epochs}epoch_{batch_size}batch'
+    ckpt_dir = args['ckpt_dir'] + f'/{task_name}/{num_episodes}demo_{episode_len}step_{chunk_size}chunk_{batch_size}batch_{backbone}'
     
     config = {
         'num_epochs': num_epochs,
@@ -93,10 +98,10 @@ def main(args):
     }
 
     if is_eval: # 如果是验证的话
-        ckpt_names = [f'policy_best.ckpt']
+        ckpt_names = [f'policy_best_epoch{num_epochs}.pth']
         results = []
         for ckpt_name in ckpt_names:
-            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True) # 调用 eval_bc() 直接验证
+            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True, num_verification=num_verification) # 调用 eval_bc() 直接验证
             results.append([ckpt_name, success_rate, avg_return])
 
         for ckpt_name, success_rate, avg_return in results:
@@ -114,14 +119,9 @@ def main(args):
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl') # pkl 是 pickle 打包的文件
     with open(stats_path, 'wb') as f: 
         pickle.dump(stats, f)
+        
+    train_bc(train_dataloader, val_dataloader, config) # 调用 train_bc() 训练，保存最新的为 best_ckpt_info 文件
     
-    best_ckpt_info = train_bc(train_dataloader, val_dataloader, config) # 调用 train_bc() 训练，保存最新的为 best_ckpt_info 文件
-    best_epoch, min_val_loss, best_state_dict = best_ckpt_info # min_val_loss 和 best_epoch 保存在
-
-    # save best checkpoint
-    ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
-    torch.save(best_state_dict, ckpt_path) 
-    print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
 
 
 def make_policy(policy_class, policy_config):
@@ -161,24 +161,24 @@ def get_image(ts, camera_names): # 推理的时候采用到
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
     return curr_image
 
-def eval_bc(config, ckpt_name, save_episode=True):
+def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     set_seed(1000)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
     policy_class = config['policy_class']
-    onscreen_render = config['onscreen_render']
     policy_config = config['policy_config']
     camera_names = config['camera_names']
     max_timesteps = config['episode_len']
     task_name = config['task_name']
     temporal_agg = config['temporal_agg']
-    onscreen_cam = 'angle'
 
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
     loading_status = policy.load_state_dict(torch.load(ckpt_path))
+    ckpt_name0 =ckpt_name.split('.')[0]
+    
     print(loading_status)
     policy.cuda()
     policy.eval() # 将policy配置为eval模式
@@ -187,7 +187,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
     with open(stats_path, 'rb') as f:
         stats = pickle.load(f)
     
-    pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
+    pre_process = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -205,31 +205,24 @@ def eval_bc(config, ckpt_name, save_episode=True):
     max_timesteps = int(max_timesteps * 1.3) # may increase for real-world tasks
     ##########################################################################################################
     
-    num_rollouts = 50 # 验证 50 次
+    num_rollouts = num_verification # 验证 50 次
+    
     episode_returns = []
     highest_rewards = []
-    
-    # 验证次数
     for rollout_id in range(num_rollouts):
-        rollout_id += 0
-        ### set task
-        if 'sim_transfer_cube' in task_name:
-            BOX_POSE[0] = sample_box_pose() # used in sim reset # 在一定范围内随机生成采样一个 cube 的位置
-        elif 'sim_insertion' in task_name:
-            BOX_POSE[0] = np.concatenate(sample_insertion_pose()) # used in sim reset
         
-        # 重置帧数
-        _, ts_obs = env.reset()
+        _, ts_obs = env.reset() # 重置帧数
 
         ### evaluation loop
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
 
-        qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+        gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
-        qpos_list = []
-        target_qpos_list = []
+        gpos_list = []
+        target_gpos_list = []
         rewards = []
+        
         with torch.inference_mode():
             path = []
             t = 0
@@ -239,17 +232,17 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     image_list.append({'wrist':obs.wrist_rgb})
                 
                 # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
-                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 # 这里也要是gripper_pose才行 笑死了，这里不是错了吗？？？，怎么预测？？
-                # qpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 = 8 
-                qpos = pre_process(qpos_numpy)
-                qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
-                qpos_history[:, t] = qpos
+                # gpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 # 这里也要是gripper_pose才行 笑死了，这里不是错了吗？？？，怎么预测？？
+                gpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 = 8 
+                gpos = pre_process(gpos_numpy)
+                gpos = torch.from_numpy(gpos).float().cuda().unsqueeze(0)
+                gpos_history[:, t] = gpos
                 curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+                        all_actions = policy(gpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
                         # 核心重点！！！
                     if temporal_agg: # 做了一个 Action Chunking
@@ -272,14 +265,14 @@ def eval_bc(config, ckpt_name, save_episode=True):
                         raw_action = all_actions[:, t % query_frequency]
                         
                 elif config['policy_class'] == "CNNMLP":
-                    raw_action = policy(qpos, curr_image) 
+                    raw_action = policy(gpos, curr_image) 
                 else:
                     raise NotImplementedError
                 
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action) # 又对预测出来的动作做了一不处理
-                target_qpos = action
+                target_gpos = action
                 
                 try:
                     next_gripper_position = action[0:3] # next 
@@ -295,8 +288,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
                         
                     ts_obs = env._scene.get_observation()
                     reward, _ = env._task.success() # 任务是否完成状态读取
-                    qpos_list.append(qpos_numpy)
-                    target_qpos_list.append(target_qpos)
+                    gpos_list.append(gpos_numpy)
+                    target_gpos_list.append(target_gpos)
                     rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                     if reward >= 1 :
                         break
@@ -308,14 +301,14 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     # np.random.seed(0)
                     t_back = (t*8)//10
                     
-                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_qpos_list[t_back][:7]]
+                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_gpos_list[t_back][:7]]
                     for i in range(t - t_back):
                         path.pop()
-                        qpos_list.pop()
-                        target_qpos_list.pop()
+                        gpos_list.pop()
+                        target_gpos_list.pop()
                     t = t_back
                         
-                    # back_gripper_pose = target_qpos_list[(t*9)//10][:7]
+                    # back_gripper_pose = target_gpos_list[(t*9)//10][:7]
                     next_gripper_position = back_gripper_pose[0:3] # next 
                     next_gripper_quaternion = back_gripper_pose[3:7]
                     try:
@@ -329,8 +322,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
                             env._scene.step() # Scene 步进
                             
                         ts_obs = env._scene.get_observation()
-                        qpos_list.append(qpos_numpy)
-                        target_qpos_list.append(target_qpos)    
+                        gpos_list.append(gpos_numpy)
+                        target_gpos_list.append(target_gpos)    
                         
                     except ConfigurationPathError:
                         print("ConfigurationPathError ConfigurationPathError")
@@ -350,7 +343,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
         print(f'{rollout_id} Rollout with {t} steps : {episode_highest_reward==env_max_reward}')
         if(rollout_id%5 == 0): # 限制保存数量，增快速度
             if save_episode:
-                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video{rollout_id}.mp4'))
+                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video_{ckpt_name0}_{rollout_id}.mp4'))
 
     success_rate = np.mean(np.array(highest_rewards) == env_max_reward) # 计算占比
     avg_return = np.mean(episode_returns) # 计算平均数
@@ -363,10 +356,10 @@ def eval_bc(config, ckpt_name, save_episode=True):
     print(summary_str)
 
     # save success rate to txt
-    result_file_name = 'result_' + ckpt_name.split('.')[0] + '.txt'
+    result_file_name = 'result_' + ckpt_name0 + f'({more_or_equal_r_rate*100}%).txt'
     with open(os.path.join(ckpt_dir, result_file_name), 'w') as f:
         f.write(summary_str)
-        f.write(repr(episode_returns))
+        # f.write(repr(episode_returns))
         f.write('\n\n')
         f.write(repr(highest_rewards)) # 输出所有验证的最好奖励分数
 
@@ -374,9 +367,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
 
 def forward_pass(data, policy):
-    image_data, qpos_data, action_data, is_pad = data
-    image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None # 提供了action data 不是训练模式
+    image_data, gpos_data, action_data, is_pad = data
+    image_data, gpos_data, action_data, is_pad = image_data.cuda(), gpos_data.cuda(), action_data.cuda(), is_pad.cuda()
+    return policy(gpos_data, image_data, action_data, is_pad) # TODO remove None # 提供了action data 不是训练模式
 
 
 def train_bc(train_dataloader, val_dataloader, config):
@@ -392,15 +385,31 @@ def train_bc(train_dataloader, val_dataloader, config):
     policy = make_policy(policy_class, policy_config)
     policy.cuda()
     optimizer = make_optimizer(policy_class, policy)
-
+    
+    # 加载已有的权重
+    start_epoch = 0
+    min_val_loss = np.inf
     train_history = []
     validation_history = []
-    min_val_loss = np.inf
-    best_ckpt_info = None # 准备返回的是数据
+    for last_history_epoch in range(num_epochs,-1,-1):
+        ckpt_path = os.path.join(ckpt_dir, f'policy_epoch{last_history_epoch + 1}_seed{seed}.ckpt')
+         
+        if os.path.exists(ckpt_path): # Load the history trained weights of epoch
+            print(f'Load the history trained weights of epoch={last_history_epoch}')
+            checkpoint = torch.load(ckpt_path, map_location=torch.device('cpu'))
+            policy.load_state_dict(checkpoint['net'])  # 加载模型可学习参数
+            optimizer.load_state_dict(checkpoint['optimizer'])  # 加载优化器参数
+            start_epoch = checkpoint['epoch']  # 设置开始的epoch
+            min_val_loss = checkpoint['min_val_loss']
+            train_history = checkpoint['train_history']
+            validation_history = checkpoint['validation_history']
+            start_epoch = start_epoch + 1
+            break 
     
-# 2. do train epoch
-    for epoch in tqdm(range(num_epochs)): # for 循环训练 epoch
-        # print(f'\nEpoch {epoch}')
+    best_ckpt_info = None # 准备返回的是数据
+    # 2. do train epoch
+    epoch = start_epoch
+    for epoch in tqdm(range(start_epoch, num_epochs)): # for 循环训练 epoch
         
         # 2.1 validation and summary the last epoch：验证出 best policy
         with torch.inference_mode():
@@ -443,40 +452,34 @@ def train_bc(train_dataloader, val_dataloader, config):
             optimizer.zero_grad() # 重置优化器梯度参数
             
             train_history.append(detach_dict(forward_dict)) #记录训练历史
-    
-        # 2.3. summary the train
-        epoch_summary = compute_dict_mean(train_history[(batch_idx+1)*epoch:(batch_idx+1)*(epoch+1)])
-        # epoch_train_loss = epoch_summary['loss']
-        # print(f'Train loss: {epoch_train_loss:.5f}')
-        # summary_string = ''
-        # for k, v in epoch_summary.items():
-        #     summary_string += f'{k}: {v.item():.3f} '
-        # print(summary_string)
 
-        # 2.4. save the weight file
-        # if epoch % 100 == 0: # 100个epoch保存一个权重文件
-        #     ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
-        #     torch.save(policy.state_dict(), ckpt_path)
-        #     plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
+    # save the policy weight for continue train
+    ckpt_path = os.path.join(ckpt_dir, f'policy_epoch{epoch + 1}_seed{seed}.ckpt')
+    checkpoint = {
+        "net": policy.state_dict(),
+        'optimizer':optimizer.state_dict(),
+        "epoch": epoch,
+        "min_val_loss": min_val_loss,
+        "train_history": train_history,
+        "validation_history": validation_history
+    }
+    torch.save(checkpoint, ckpt_path)
     
-    ckpt_path = os.path.join(ckpt_dir, f'policy_last.ckpt')
-    torch.save(policy.state_dict(), ckpt_path)
-
-    best_epoch, min_val_loss, best_state_dict = best_ckpt_info
-    ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{best_epoch}_seed_{seed}.ckpt')
-    torch.save(best_state_dict, ckpt_path)
+    # save best checkpoint
+    best_epoch, min_val_loss, best_state_dict = best_ckpt_info 
+    pth_path = os.path.join(ckpt_dir, f'policy_best_epoch{epoch + 1}.pth') # 用来推理用的ckpt
+    torch.save(best_state_dict, pth_path) 
+    
     print(f'Training finished:\nSeed {seed}, val loss {min_val_loss:.6f} at epoch {best_epoch}')
-
     # save training curves
     plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed)
-
     return best_ckpt_info
 
 
 def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
     # save training curves
     for key in train_history[0]:
-        plot_path = os.path.join(ckpt_dir, f'train_val_{key}_seed_{seed}.png')
+        plot_path = os.path.join(ckpt_dir, f'trainval_{key}_epoch{num_epochs}_seed{seed}.png')
         
         plt.figure()
         train_values = [summary[key].item() for summary in train_history]
@@ -497,6 +500,7 @@ def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--eval', action='store_true') # 是训练还是验证评估
+    parser.add_argument('--num_verification',  default=50, type=int, help='number of verification') # 验证次数
     parser.add_argument('--onscreen_render', action='store_true') # 是否在屏幕上实时渲染？（只在eval时才有用）
     parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True) # 权重文件保存地址
     
@@ -516,5 +520,6 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False) # 隐藏层层数
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False) # 前馈层层数
     parser.add_argument('--temporal_agg', action='store_true')
-    
+    parser.add_argument('--backbone', default='resnet18', type=str, help="Name of the convolutional backbone to use")
+
     main(vars(parser.parse_args()))

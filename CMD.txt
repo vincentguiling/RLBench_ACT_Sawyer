@@ -10,7 +10,7 @@ python3 RLBench/tools/dataset_generator_sawyer_act2.py \
     --tasks reach_target_sawyer2 \
     --variations 1 \
     --episodes_per_task 50 \
-    --episode_len 52
+    --episode_len 51
     
 # 数据集可视化
 python3 act/visualize_episodes.py --dataset_dir Datasets/reach_target_sawyer3/variation0 --episode_idx 0
@@ -19,19 +19,20 @@ python3 act/visualize_episodes.py --dataset_dir Datasets/reach_target_sawyer3/va
 python3 act/imitate_episodes_sawyer2.py \
     --task_name reach_target_sawyer2 \
     --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 16 --dim_feedforward 3200 \
     --num_epochs 1000  --lr 1e-5 \
     --seed 0 \
+    --backbone resnet50
 ; \
 python3 act/imitate_episodes_sawyer2.py \
     --task_name reach_target_sawyer2 \
     --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 16 --dim_feedforward 3200 \
     --num_epochs 1000  --lr 1e-5 \
     --seed 0 \
     --eval \
-    --temporal_agg 
-
+    --temporal_agg
+  
 
 # 服务器：
 bash /home/ubuntu/data0/liangws/peract_root/CoppeliaSim/coppeliaSim.sh  

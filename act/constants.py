@@ -13,7 +13,7 @@ SIM_TASK_CONFIGS = {
     'reach_target_sawyer2':{
         'dataset_dir': DATA_DIR + '/reach_target_sawyer2/variation0',
         'num_episodes': 50,
-        'episode_len': 52,
+        'episode_len': 51,
         'camera_names': ['wrist','wrist_depth']
     },
     'reach_target_sawyer3':{ 
