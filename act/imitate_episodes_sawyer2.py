@@ -150,7 +150,7 @@ def get_image(ts, camera_names): # 推理的时候采用到
     curr_image = rearrange(ts.wrist_rgb, 'h w c -> c h w')
     curr_images.append(curr_image)    
     
-    if(len(camera_names) == 2):
+    if "wrist_depth" in camera_names:
         wrist_depth = float_array_to_rgb_image(ts.wrist_depth, scale_factor=DEPTH_SCALE)
         wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
         
@@ -391,7 +391,7 @@ def train_bc(train_dataloader, val_dataloader, config):
     min_val_loss = np.inf
     train_history = []
     validation_history = []
-    for last_history_epoch in range(num_epochs,-1,-1):
+    for last_history_epoch in range(num_epochs-2,-1,-1):
         ckpt_path = os.path.join(ckpt_dir, f'policy_epoch{last_history_epoch + 1}_seed{seed}.ckpt')
          
         if os.path.exists(ckpt_path): # Load the history trained weights of epoch
