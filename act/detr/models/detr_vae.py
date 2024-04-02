@@ -69,38 +69,38 @@ class DETRVAE(nn.Module):
         self.latent_dim = 32 # final size of latent z # TODO tune
         self.cls_embed = nn.Embedding(1, hidden_dim) # extra cls token embedding
         self.encoder_action_proj = nn.Linear(8, hidden_dim) # project action to embedding
-        self.encoder_joint_proj = nn.Linear(8, hidden_dim)  # project gpos to embedding
+        self.encoder_joint_proj = nn.Linear(8, hidden_dim)  # project qpos to embedding
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
-        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], gpos, a_seq
+        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
 
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
         self.additional_pos_embed = nn.Embedding(2, hidden_dim) # learned position embedding for proprio and latent
 
-    def forward(self, gpos, image, env_state, actions=None, is_pad=None):
+    def forward(self, qpos, image, env_state, actions=None, is_pad=None):
         """
-        gpos: batch, gpos_dim
+        qpos: batch, qpos_dim
         image: batch, num_cam, channel, height, width
         env_state: None
         actions: batch, seq, action_dim
         """
         is_training = actions is not None # train or val
-        bs, _ = gpos.shape
+        bs, _ = qpos.shape
         ### Obtain latent z from action sequence
         if is_training:
             # project action sequence to embedding dim, and concat with a CLS token
             action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim)
-            gpos_embed = self.encoder_joint_proj(gpos)  # (bs, hidden_dim)
-            gpos_embed = torch.unsqueeze(gpos_embed, axis=1)  # (bs, 1, hidden_dim)
+            qpos_embed = self.encoder_joint_proj(qpos)  # (bs, hidden_dim)
+            qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim)
             
             cls_embed = self.cls_embed.weight # (1, hidden_dim)
             cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
             
-            encoder_input = torch.cat([cls_embed, gpos_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
+            encoder_input = torch.cat([cls_embed, qpos_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
             encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
             
             # do not mask cls token
-            cls_joint_is_pad = torch.full((bs, 2), False).to(gpos.device) # False: not a padding
+            cls_joint_is_pad = torch.full((bs, 2), False).to(qpos.device) # False: not a padding
             is_pad = torch.cat([cls_joint_is_pad, is_pad], axis=1)  # (bs, seq+1)
             
             # obtain position embedding
@@ -118,7 +118,7 @@ class DETRVAE(nn.Module):
             latent_input = self.latent_out_proj(latent_sample)
         else: # 验证的时候没用Z吗？ 对，Z=0向量
             mu = logvar = None
-            latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(gpos.device)
+            latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
             latent_input = self.latent_out_proj(latent_sample)
 
         if self.backbones is not None: # 用骨干网络做图像预处理
@@ -133,16 +133,16 @@ class DETRVAE(nn.Module):
                 all_cam_pos.append(pos)
                 
             # proprioception features
-            proprio_input = self.input_proj_robot_state(gpos)
+            proprio_input = self.input_proj_robot_state(qpos)
             
             # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
             hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
         else:
-            gpos = self.input_proj_robot_state(gpos)
+            qpos = self.input_proj_robot_state(qpos)
             env_state = self.input_proj_env_state(env_state)
-            transformer_input = torch.cat([gpos, env_state], axis=1) # seq length = 2
+            transformer_input = torch.cat([qpos, env_state], axis=1) # seq length = 2
             hs = self.transformer(transformer_input, None, self.query_embed.weight, self.pos.weight)[0]
             
         a_hat = self.action_head(hs)
@@ -182,15 +182,15 @@ class CNNMLP(nn.Module):
         else:
             raise NotImplementedError
 
-    def forward(self, gpos, image, env_state, actions=None):
+    def forward(self, qpos, image, env_state, actions=None):
         """
-        gpos: batch, gpos_dim
+        qpos: batch, qpos_dim
         image: batch, num_cam, channel, height, width
         env_state: None
         actions: batch, seq, action_dim
         """
         is_training = actions is not None # train or val
-        bs, _ = gpos.shape
+        bs, _ = qpos.shape
         # Image observation features and position embeddings
         all_cam_features = []
         for cam_id, cam_name in enumerate(self.camera_names):
@@ -203,7 +203,7 @@ class CNNMLP(nn.Module):
         for cam_feature in all_cam_features:
             flattened_features.append(cam_feature.reshape([bs, -1]))
         flattened_features = torch.cat(flattened_features, axis=1) # 768 each
-        features = torch.cat([flattened_features, gpos], axis=1) # gpos: 14
+        features = torch.cat([flattened_features, qpos], axis=1) # qpos: 14
         a_hat = self.mlp(features)
         return a_hat
 

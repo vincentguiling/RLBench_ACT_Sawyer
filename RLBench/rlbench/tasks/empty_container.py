@@ -50,6 +50,7 @@ class EmptyContainer(Task):
             list(range(index)) + list(
                 range(index + 1, len(colors))),
             size=1, replace=False)[0]
+        
         _, distractor_color_rgb = colors[color_choice]
         if index % 2 == 0:
             self.target_container0.set_color(target_color_rgb)
@@ -62,6 +63,7 @@ class EmptyContainer(Task):
             for ob in self.bin_objects:
                 conditions.append(DetectedCondition(ob, self.success_detector1))
             target_pos[1] = -target_pos[1]
+            
         self.target_waypoint.set_position(
             target_pos, relative_to=self.large_container, reset_dynamics=True)
         self.register_success_conditions(

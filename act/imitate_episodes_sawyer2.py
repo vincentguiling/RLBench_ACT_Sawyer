@@ -187,7 +187,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     with open(stats_path, 'rb') as f:
         stats = pickle.load(f)
     
-    pre_process = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
+    pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -217,10 +217,10 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
 
-        gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+        qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
-        gpos_list = []
-        target_gpos_list = []
+        qpos_list = []
+        target_qpos_list = []
         rewards = []
         
         with torch.inference_mode():
@@ -230,19 +230,19 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                 obs = ts_obs
                 if(rollout_id%5 == 0): # 限制保存数量，增快速度
                     image_list.append({'wrist':obs.wrist_rgb})
+                    # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                 
-                # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
-                # gpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 # 这里也要是gripper_pose才行 笑死了，这里不是错了吗？？？，怎么预测？？
-                gpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 = 8 
-                gpos = pre_process(gpos_numpy)
-                gpos = torch.from_numpy(gpos).float().cuda().unsqueeze(0)
-                gpos_history[:, t] = gpos
+                # qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 # 这里也要是gripper_pose才行 笑死了，这里不是错了吗？？？，怎么预测？？
+                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 
+                qpos = pre_process(qpos_numpy)
+                qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
+                qpos_history[:, t] = qpos
                 curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
-                        all_actions = policy(gpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+                        all_actions = policy(qpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
                         # 核心重点！！！
                     if temporal_agg: # 做了一个 Action Chunking
@@ -265,14 +265,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                         raw_action = all_actions[:, t % query_frequency]
                         
                 elif config['policy_class'] == "CNNMLP":
-                    raw_action = policy(gpos, curr_image) 
+                    raw_action = policy(qpos, curr_image) 
                 else:
                     raise NotImplementedError
                 
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action) # 又对预测出来的动作做了一不处理
-                target_gpos = action
+                target_qpos = action
                 
                 try:
                     next_gripper_position = action[0:3] # next 
@@ -288,8 +288,8 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                         
                     ts_obs = env._scene.get_observation()
                     reward, _ = env._task.success() # 任务是否完成状态读取
-                    gpos_list.append(gpos_numpy)
-                    target_gpos_list.append(target_gpos)
+                    qpos_list.append(qpos_numpy)
+                    target_qpos_list.append(target_qpos)
                     rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                     if reward >= 1 :
                         break
@@ -301,14 +301,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                     # np.random.seed(0)
                     t_back = (t*8)//10
                     
-                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_gpos_list[t_back][:7]]
+                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_qpos_list[t_back][:7]]
                     for i in range(t - t_back):
                         path.pop()
-                        gpos_list.pop()
-                        target_gpos_list.pop()
+                        qpos_list.pop()
+                        target_qpos_list.pop()
                     t = t_back
                         
-                    # back_gripper_pose = target_gpos_list[(t*9)//10][:7]
+                    # back_gripper_pose = target_qpos_list[(t*9)//10][:7]
                     next_gripper_position = back_gripper_pose[0:3] # next 
                     next_gripper_quaternion = back_gripper_pose[3:7]
                     try:
@@ -322,8 +322,8 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                             env._scene.step() # Scene 步进
                             
                         ts_obs = env._scene.get_observation()
-                        gpos_list.append(gpos_numpy)
-                        target_gpos_list.append(target_gpos)    
+                        qpos_list.append(qpos_numpy)
+                        target_qpos_list.append(target_qpos)    
                         
                     except ConfigurationPathError:
                         print("ConfigurationPathError ConfigurationPathError")
@@ -367,9 +367,9 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
 
 
 def forward_pass(data, policy):
-    image_data, gpos_data, action_data, is_pad = data
-    image_data, gpos_data, action_data, is_pad = image_data.cuda(), gpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(gpos_data, image_data, action_data, is_pad) # TODO remove None # 提供了action data 不是训练模式
+    image_data, qpos_data, action_data, is_pad = data
+    image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
+    return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None # 提供了action data 不是训练模式
 
 
 def train_bc(train_dataloader, val_dataloader, config):

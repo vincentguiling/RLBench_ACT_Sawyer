@@ -28,11 +28,18 @@ SIM_TASK_CONFIGS = {
         'episode_len': 51,
         'camera_names': ['wrist','wrist_depth']
     },
+    'sorting_program':{ 
+        'dataset_dir': DATA_DIR + '/sorting_program/variation0',
+        'num_episodes': 50,
+        'episode_len': 51,
+        'camera_names': ['wrist','wrist_depth']
+    },
+
 
 }
 
 ### Simulation envs fixed constants
-DT = 0.02
+DT = 0.05
 JOINT_NAMES = ["waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
 START_ARM_POSE = [0, -0.96, 1.16, 0, -0.3, 0, 0.02239, -0.02239,  0, -0.96, 1.16, 0, -0.3, 0, 0.02239, -0.02239]
 
