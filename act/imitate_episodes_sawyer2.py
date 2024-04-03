@@ -157,6 +157,10 @@ def get_image(ts, camera_names): # 推理的时候采用到
         curr_image = rearrange(wrist_depth, 'h w c -> c h w')
         curr_images.append(curr_image)
         
+    if "head" in camera_names:    
+        curr_image = rearrange(ts.head_rgb, 'h w c -> c h w')
+        curr_images.append(curr_image)
+        
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
     return curr_image
@@ -187,7 +191,9 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     with open(stats_path, 'rb') as f:
         stats = pickle.load(f)
     
-    pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
+    pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
+    pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
+    
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -218,6 +224,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+        gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
         qpos_list = []
         target_qpos_list = []
@@ -229,14 +236,19 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
             for timestep in range(max_timesteps): # 最大帧数
                 obs = ts_obs
                 if(rollout_id%5 == 0): # 限制保存数量，增快速度
-                    image_list.append({'wrist':obs.wrist_rgb})
+                    image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
                     # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                 
-                # qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 # 这里也要是gripper_pose才行 笑死了，这里不是错了吗？？？，怎么预测？？
+                gpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 = 8 # 非常容易错
+                gpos = pre_process_gpos(gpos_numpy)
+                gpos = torch.from_numpy(gpos).float().cuda().unsqueeze(0)
+                gpos_history[:, t] = gpos
+                
                 qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 
-                qpos = pre_process(qpos_numpy)
+                qpos = pre_process_qpos(qpos_numpy)
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
+                
                 curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
                 ### query policy
@@ -271,9 +283,18 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                 
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
-                action = post_process(raw_action) # 又对预测出来的动作做了一不处理
+                action = post_process(raw_action) 
                 target_qpos = action
                 
+                ###################################################
+                # 将qpos作为action
+                # ts_obs, reward, terminate = env.step(target_qpos)
+                # qpos_list.append(qpos_numpy)
+                # target_qpos_list.append(target_qpos)
+                # rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
+                ###################################################
+                
+                # 将gpos作为action
                 try:
                     next_gripper_position = action[0:3] # next 
                     next_gripper_quaternion = action[3:7]

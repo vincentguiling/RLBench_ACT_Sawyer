@@ -117,7 +117,8 @@ class TaskEnvironment(object):
                         
                     point.end_of_path()
                 break
-
+        ####################################################################################################################################
+        
         return desc, self._scene.get_observation()
 
     def get_observation(self) -> Observation:

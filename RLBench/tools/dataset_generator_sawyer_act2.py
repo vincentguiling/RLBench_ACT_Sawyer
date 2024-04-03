@@ -66,6 +66,7 @@ def save_demo(demo, example_path, ex_idx):
         '/action': [], 
         '/observations/images/wrist': [],
         '/observations/images/wrist_depth': [],
+        '/observations/images/head': [],
         '/observations/gpos': [],
         '/observations/qpos': [],
     }
@@ -76,11 +77,12 @@ def save_demo(demo, example_path, ex_idx):
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
         
         # data_dict['/observations/images/wrist'].append(obs.wrist_rgb*255) # 480， 640， 3 # 从最开始就错了，为什么要*255！
+           
         data_dict['/observations/images/wrist'].append(obs.wrist_rgb) # 480， 640， 3
-        
         wrist_depth = utils.float_array_to_rgb_image(obs.wrist_depth, scale_factor=DEPTH_SCALE)
         wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
         data_dict['/observations/images/wrist_depth'].append(wrist_depth)
+        data_dict['/observations/images/head'].append(obs.head_rgb)
         data_dict['/observations/gpos'].append(np.append(obs.gripper_pose, obs.gripper_open))
         data_dict['/observations/qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
     
@@ -95,6 +97,7 @@ def save_demo(demo, example_path, ex_idx):
         image = obs.create_group('images')
         image.create_dataset('wrist', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
         image.create_dataset('wrist_depth', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
+        image.create_dataset('head', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
         gpos = obs.create_dataset('gpos', (max_timesteps, 8))
         qpos = obs.create_dataset('qpos', (max_timesteps, 8))
         
@@ -114,11 +117,12 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     
     obs_config.set_all(False)
     obs_config.wrist_camera.set_all(True)
+    obs_config.head_camera.set_all(True)
     obs_config.set_all_low_dim(True)
     
     obs_config.wrist_camera.image_size = img_size
-
-    # obs_config.wrist_camera.depth_in_meters = False
+    obs_config.head_camera.image_size = img_size
+    obs_config.wrist_camera.depth_in_meters = False
 
     if FLAGS.renderer == 'opengl':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL

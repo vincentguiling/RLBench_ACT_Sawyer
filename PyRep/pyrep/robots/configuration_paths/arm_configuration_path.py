@@ -187,10 +187,19 @@ class ArmConfigurationPath(ConfigurationPath):
                     dx = p2 - p1
                     qs = p1 + dx * t
                     self._joint_position_action = qs
+                    
+                    # 实现固定head关节固定摄像头方向
+                    from pyrep.objects.joint import Joint
+                    head_joint = Joint("Sawyer_headJoint")
+                    head_joint.set_joint_target_position(-qs[0])
+
+                    
                     self._arm.set_joint_target_positions(qs)
+                   
                     break
         if state == 1:
             sim.simRMLRemove(self._rml_handle) # 不会停留
+            
         return state
 
     def _get_path_point_lengths(self) -> List[float]:

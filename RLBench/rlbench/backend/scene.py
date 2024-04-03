@@ -47,6 +47,10 @@ class Scene(object):
         self._cam_overhead = VisionSensor('cam_overhead')
         self._cam_wrist = VisionSensor('cam_wrist')
         self._cam_front = VisionSensor('cam_front')
+        
+        self._cam_head = VisionSensor('cam_head')
+        self._cam_head_mask = VisionSensor('cam_head_mask')
+        
         self._cam_over_shoulder_left_mask = VisionSensor(
             'cam_over_shoulder_left_mask')
         self._cam_over_shoulder_right_mask = VisionSensor(
@@ -158,6 +162,11 @@ class Scene(object):
         self.robot.arm.set_joint_positions(self._start_arm_joint_pos, disable_dynamics=True)
         self.robot.arm.set_joint_target_velocities(
             [0] * len(self.robot.arm.joints))
+        # head_joint reset for sawyer
+        from pyrep.objects.joint import Joint
+        head_joint = Joint("Sawyer_headJoint")
+        head_joint.set_joint_target_position(0)
+        
         self.robot.gripper.set_joint_positions(
             self._starting_gripper_joint_pos, disable_dynamics=True)
         self.robot.gripper.set_joint_target_velocities(
@@ -191,10 +200,11 @@ class Scene(object):
         oc_ob = self._obs_config.overhead_camera
         wc_ob = self._obs_config.wrist_camera
         fc_ob = self._obs_config.front_camera
+        hc_ob = self._obs_config.head_camera
 
-        lsc_mask_fn, rsc_mask_fn, oc_mask_fn, wc_mask_fn, fc_mask_fn = [
+        lsc_mask_fn, rsc_mask_fn, oc_mask_fn, wc_mask_fn, fc_mask_fn, hc_mask_fn = [
             (rgb_handles_to_mask if c.masks_as_one_channel else lambda x: x
-             ) for c in [lsc_ob, rsc_ob, oc_ob, wc_ob, fc_ob]]
+             ) for c in [lsc_ob, rsc_ob, oc_ob, wc_ob, fc_ob, hc_ob]]
 
         def get_rgb_depth(sensor: VisionSensor, get_rgb: bool, get_depth: bool,
                           get_pcd: bool, rgb_noise: NoiseModel,
@@ -245,7 +255,10 @@ class Scene(object):
         front_rgb, front_depth, front_pcd = get_rgb_depth(
             self._cam_front, fc_ob.rgb, fc_ob.depth, fc_ob.point_cloud,
             fc_ob.rgb_noise, fc_ob.depth_noise, fc_ob.depth_in_meters)
-
+        head_rgb, head_depth, head_pcd = get_rgb_depth(
+            self._cam_head, hc_ob.rgb, hc_ob.depth, hc_ob.point_cloud,
+            hc_ob.rgb_noise, hc_ob.depth_noise, hc_ob.depth_in_meters)
+        
         left_shoulder_mask = get_mask(self._cam_over_shoulder_left_mask,
                                       lsc_mask_fn) if lsc_ob.mask else None
         right_shoulder_mask = get_mask(self._cam_over_shoulder_right_mask,
@@ -256,28 +269,38 @@ class Scene(object):
                               wc_mask_fn) if wc_ob.mask else None
         front_mask = get_mask(self._cam_front_mask,
                               fc_mask_fn) if fc_ob.mask else None
-
+        head_mask = get_mask(self._cam_head_mask,
+                              hc_mask_fn) if hc_ob.mask else None
+        
         obs = Observation(
-            left_shoulder_rgb=left_shoulder_rgb,
-            left_shoulder_depth=left_shoulder_depth,
-            left_shoulder_point_cloud=left_shoulder_pcd,
-            right_shoulder_rgb=right_shoulder_rgb,
-            right_shoulder_depth=right_shoulder_depth,
-            right_shoulder_point_cloud=right_shoulder_pcd,
-            overhead_rgb=overhead_rgb,
-            overhead_depth=overhead_depth,
-            overhead_point_cloud=overhead_pcd,
-            wrist_rgb=wrist_rgb,
-            wrist_depth=wrist_depth,
-            wrist_point_cloud=wrist_pcd,
-            front_rgb=front_rgb,
-            front_depth=front_depth,
-            front_point_cloud=front_pcd,
-            left_shoulder_mask=left_shoulder_mask,
-            right_shoulder_mask=right_shoulder_mask,
-            overhead_mask=overhead_mask,
-            wrist_mask=wrist_mask,
-            front_mask=front_mask,
+            left_shoulder_rgb=left_shoulder_rgb if self._obs_config.left_shoulder_camera.rgb else None,
+            left_shoulder_depth=left_shoulder_depth if self._obs_config.left_shoulder_camera.rgb else None,
+            left_shoulder_point_cloud=left_shoulder_pcd if self._obs_config.left_shoulder_camera.rgb else None,
+            right_shoulder_rgb=right_shoulder_rgb if self._obs_config.right_shoulder_camera.rgb else None,
+            right_shoulder_depth=right_shoulder_depth if self._obs_config.right_shoulder_camera.rgb else None,
+            right_shoulder_point_cloud=right_shoulder_pcd if self._obs_config.right_shoulder_camera.rgb else None,
+            overhead_rgb=overhead_rgb if self._obs_config.overhead_camera.rgb else None,
+            overhead_depth=overhead_depth if self._obs_config.overhead_camera.rgb else None,
+            overhead_point_cloud=overhead_pcd if self._obs_config.overhead_camera.rgb else None,
+            front_rgb=front_rgb if self._obs_config.front_camera.rgb else None,
+            front_depth=front_depth if self._obs_config.front_camera.rgb else None,
+            front_point_cloud=front_pcd if self._obs_config.front_camera.rgb else None,
+            
+            wrist_rgb=wrist_rgb if self._obs_config.wrist_camera.rgb else None,
+            wrist_depth=wrist_depth if self._obs_config.wrist_camera.rgb else None,
+            wrist_point_cloud=wrist_pcd if self._obs_config.wrist_camera.rgb else None,
+
+            head_rgb=head_rgb if self._obs_config.head_camera.rgb else None,
+            head_depth=head_depth if self._obs_config.head_camera.rgb else None,
+            head_point_cloud=head_pcd if self._obs_config.head_camera.rgb else None,
+            
+            left_shoulder_mask=left_shoulder_mask if self._obs_config.left_shoulder_camera.rgb else None,
+            right_shoulder_mask=right_shoulder_mask if self._obs_config.right_shoulder_camera.rgb else None,
+            overhead_mask=overhead_mask if self._obs_config.overhead_camera.rgb else None,
+            front_mask=front_mask if self._obs_config.front_camera.rgb else None,
+            
+            wrist_mask=wrist_mask if self._obs_config.wrist_camera.rgb else None,
+            head_mask=head_mask if self._obs_config.head_camera.rgb else None,
             joint_velocities=(
                 self._obs_config.joint_velocities_noise.apply(
                     np.array(self.robot.arm.get_joint_velocities()))
@@ -366,8 +389,10 @@ class Scene(object):
                     if len(ext) > 0 and 'steps(' in ext:
                         steps_len = int(ext[ext.index('steps(') + 6])
                         path, is_linear = point.get_path(steps=steps_len)
+                    elif len(waypoints) == 1:
+                        path, is_linear = point.get_path(steps=episode_len-1)
                     else:
-                        path, is_linear = point.get_path()
+                        path, is_linear = point.get_path(steps=50) # 默认步数
                         
                     [s.set_collidable(True) for s in colliding_shapes]
                 except ConfigurationPathError as e:
@@ -389,6 +414,7 @@ class Scene(object):
                 if not no_record:
                     self._demo_record_step(demo, record, callable_each_step) # 结束的最后一帧
                 
+        
                 print(f"point {i} has reached with {self._lens_episode_count} steps, success = {success}, done = {done}") # success is for task not for waypoint, maybe the done is for waypoint 
                 
                 point.end_of_path()
@@ -527,6 +553,10 @@ class Scene(object):
             self._obs_config.overhead_camera.depth,
             self._obs_config.overhead_camera)
         _set_rgb_props(
+            self._cam_head, self._obs_config.head_camera.rgb,
+            self._obs_config.head_camera.depth,
+            self._obs_config.head_camera)
+        _set_rgb_props(
             self._cam_wrist, self._obs_config.wrist_camera.rgb,
             self._obs_config.wrist_camera.depth,
             self._obs_config.wrist_camera)
@@ -552,6 +582,9 @@ class Scene(object):
         _set_mask_props(
             self._cam_front_mask, self._obs_config.front_camera.mask,
             self._obs_config.front_camera)
+        _set_mask_props(
+            self._cam_head_mask, self._obs_config.head_camera.mask,
+            self._obs_config.head_camera)
 
     def _place_task(self) -> None:
         self._workspace_boundary.clear()
@@ -577,6 +610,7 @@ class Scene(object):
         misc = _get_cam_data(self._cam_over_shoulder_left, 'left_shoulder_camera')
         misc.update(_get_cam_data(self._cam_over_shoulder_right, 'right_shoulder_camera'))
         misc.update(_get_cam_data(self._cam_overhead, 'overhead_camera'))
+        misc.update(_get_cam_data(self._cam_head, 'head_camera'))
         misc.update(_get_cam_data(self._cam_front, 'front_camera'))
         misc.update(_get_cam_data(self._cam_wrist, 'wrist_camera'))
         misc.update({"variation_index": self._variation_index})

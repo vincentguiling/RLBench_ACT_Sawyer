@@ -17,6 +17,10 @@ class Observation(object):
                  overhead_depth: np.ndarray,
                  overhead_mask: np.ndarray,
                  overhead_point_cloud: np.ndarray,
+                 head_rgb: np.ndarray,
+                 head_depth: np.ndarray,
+                 head_mask: np.ndarray,
+                 head_point_cloud: np.ndarray,
                  wrist_rgb: np.ndarray,
                  wrist_depth: np.ndarray,
                  wrist_mask: np.ndarray,
@@ -47,6 +51,10 @@ class Observation(object):
         self.overhead_depth = overhead_depth
         self.overhead_mask = overhead_mask
         self.overhead_point_cloud = overhead_point_cloud
+        self.head_rgb = head_rgb
+        self.head_depth = head_depth
+        self.head_mask = head_mask
+        self.head_point_cloud = head_point_cloud
         self.wrist_rgb = wrist_rgb
         self.wrist_depth = wrist_depth
         self.wrist_mask = wrist_mask

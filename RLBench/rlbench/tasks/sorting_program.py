@@ -11,6 +11,8 @@ from rlbench.backend.spawn_boundary import SpawnBoundary
 from rlbench.const import colors
 import numpy as np
 
+
+
 class SortingProgram(Task):
 
     def init_task(self) -> None:
