@@ -6,10 +6,10 @@ python3 RLBench/tools/dataset_generator_sawyer_act2.py \
     --tasks sorting_program \
     --variations 1 \
     --episodes_per_task 50 \
-    --episode_len 51
+    --episode_len 31
     
 epoch_list=(1000 2000 3000)
-batch_size=(8 4)
+batch_size=(8 16 4)
 chunk_size=(10)
 backbone_list=("resnet18")
 

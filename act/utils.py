@@ -36,6 +36,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
             # get observation at start_ts only
             gpos = root['/observations/gpos'][start_ts]
             qpos = root['/observations/qpos'][start_ts]
+            
+            qpos = np.append(qpos,gpos)
+            
             image_dict = dict()
             for cam_name in self.camera_names:
                 image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
@@ -62,7 +65,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # construct observations
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
-        gpos_data = torch.from_numpy(gpos).float()
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
 
@@ -73,14 +75,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
         image_data = image_data / 255.0
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
-        gpos_data = (gpos_data - self.norm_stats["gpos_mean"]) / self.norm_stats["gpos_std"]
         
         return image_data, qpos_data, action_data, is_pad
 
 
 def get_norm_stats(dataset_dir, num_episodes):
     all_qpos_data = []
-    all_gpos_data = []
     all_action_data = []
     for episode_idx in range(num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
@@ -88,12 +88,11 @@ def get_norm_stats(dataset_dir, num_episodes):
             qpos = root['/observations/qpos'][()]
             gpos = root['/observations/gpos'][()]
             action = root['/action'][()]
+        qpos = np.append(qpos,gpos)
         all_qpos_data.append(torch.from_numpy(qpos))
-        all_gpos_data.append(torch.from_numpy(gpos))
         all_action_data.append(torch.from_numpy(action))
         
     all_qpos_data = torch.stack(all_qpos_data)
-    all_gpos_data = torch.stack(all_gpos_data)
     all_action_data = torch.stack(all_action_data)
     all_action_data = all_action_data
 
@@ -106,20 +105,12 @@ def get_norm_stats(dataset_dir, num_episodes):
     qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
     qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
     qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
-    
-    # normalize gpos data
-    gpos_mean = all_gpos_data.mean(dim=[0, 1], keepdim=True)
-    gpos_std = all_gpos_data.std(dim=[0, 1], keepdim=True)
-    gpos_std = torch.clip(gpos_std, 1e-2, np.inf) # clipping
 
     stats = {"action_mean": action_mean.numpy().squeeze(), 
              "action_std": action_std.numpy().squeeze(),
              "qpos_mean": qpos_mean.numpy().squeeze(), 
              "qpos_std": qpos_std.numpy().squeeze(),
-             "example_qpos": qpos,
-             "gpos_mean": gpos_mean.numpy().squeeze(), 
-             "gpos_std": gpos_std.numpy().squeeze(),
-             "example_gpos": gpos
+             "example_qpos": qpos
              } # example_qpos就像是在作弊一样，应该可以大大提高成功率
 
     return stats

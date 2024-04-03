@@ -42,12 +42,16 @@ def make_sim_env(task_name):
     img_size = [640,480] # 图片格式大小
     
     obs_config = ObservationConfig()
+    
     obs_config.set_all(False)
     obs_config.wrist_camera.set_all(True)
+    obs_config.head_camera.set_all(True)
     obs_config.set_all_low_dim(True)
+    
     obs_config.wrist_camera.image_size = img_size
-    # obs_config.head_camera.image_size = img_size
-    obs_config.front_camera.image_size = img_size
+    obs_config.head_camera.image_size = img_size
+    obs_config.wrist_camera.depth_in_meters = False
+    # obs_config.front_camera.image_size = img_size
     
     headless_val = False
     if socket.gethostname() != 'XJ':

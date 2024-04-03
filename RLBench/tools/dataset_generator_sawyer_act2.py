@@ -67,8 +67,8 @@ def save_demo(demo, example_path, ex_idx):
         '/observations/images/wrist': [],
         '/observations/images/wrist_depth': [],
         '/observations/images/head': [],
-        '/observations/gpos': [],
         '/observations/qpos': [],
+        '/observations/gpos': [],
     }
     max_timesteps = len(demo)
     
@@ -83,8 +83,8 @@ def save_demo(demo, example_path, ex_idx):
         wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
         data_dict['/observations/images/wrist_depth'].append(wrist_depth)
         data_dict['/observations/images/head'].append(obs.head_rgb)
-        data_dict['/observations/gpos'].append(np.append(obs.gripper_pose, obs.gripper_open))
         data_dict['/observations/qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
+        data_dict['/observations/gpos'].append(obs.gripper_pose)
     
     data_dict['/action'].append(np.append(obs.gripper_pose,obs.gripper_open))
     dataset_path = os.path.join(example_path, f'episode_{ex_idx}') # save path
@@ -98,8 +98,8 @@ def save_demo(demo, example_path, ex_idx):
         image.create_dataset('wrist', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
         image.create_dataset('wrist_depth', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
         image.create_dataset('head', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
-        gpos = obs.create_dataset('gpos', (max_timesteps, 8))
         qpos = obs.create_dataset('qpos', (max_timesteps, 8))
+        gpos = obs.create_dataset('gpos', (max_timesteps, 7))
         
         for name, array in data_dict.items():
             root[name][...] = array

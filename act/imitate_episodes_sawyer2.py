@@ -48,7 +48,7 @@ def main(args):
     camera_names = task_config['camera_names']
 
     # fixed parameters
-    state_dim = 8 # 左右机械臂，一共7*2 = 14,7+1
+    state_dim = 15 # 左右机械臂，一共7*2 = 14,7+1
     lr_backbone = 1e-5
     
     backbone = args['backbone']
@@ -192,7 +192,6 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
         stats = pickle.load(f)
     
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
-    pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
     
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
@@ -221,10 +220,9 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
 
         ### evaluation loop
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
-            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
+            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
-        gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
         qpos_list = []
         target_qpos_list = []
@@ -239,12 +237,8 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                     image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
                     # image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                 
-                gpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 = 8 # 非常容易错
-                gpos = pre_process_gpos(gpos_numpy)
-                gpos = torch.from_numpy(gpos).float().cuda().unsqueeze(0)
-                gpos_history[:, t] = gpos
-                
-                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8 
+                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 + 7 = 15
+                qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
                 qpos = pre_process_qpos(qpos_numpy)
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
