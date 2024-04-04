@@ -410,7 +410,7 @@ def train_bc(train_dataloader, val_dataloader, config):
         ckpt_path = os.path.join(ckpt_dir, f'policy_epoch{last_history_epoch + 1}_seed{seed}.ckpt')
          
         if os.path.exists(ckpt_path): # Load the history trained weights of epoch
-            print(f'Load the history trained weights of epoch={last_history_epoch}')
+            print(f'Load the history trained weights of epoch={last_history_epoch+1}')
             checkpoint = torch.load(ckpt_path, map_location=torch.device('cpu'))
             policy.load_state_dict(checkpoint['net'])  # 加载模型可学习参数
             optimizer.load_state_dict(checkpoint['optimizer'])  # 加载优化器参数

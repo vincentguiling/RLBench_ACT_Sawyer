@@ -32,7 +32,7 @@ SIM_TASK_CONFIGS = {
         'dataset_dir': DATA_DIR + '/sorting_program/variation0',
         'num_episodes': 50,
         'episode_len': 31,
-        'camera_names': ['wrist','wrist_depth','head']
+        'camera_names': ['wrist','wrist_depth']
     },
 
 
