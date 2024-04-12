@@ -10,7 +10,19 @@ import torchvision
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
 from typing import Dict, List
-
+from torchvision.models import (
+    efficientnet_b0,
+    EfficientNet_B0_Weights,
+    efficientnet_b3,
+    EfficientNet_B3_Weights,
+    EfficientNet_B5_Weights,
+    resnet18,
+    ResNet18_Weights,
+    resnet34,
+    ResNet34_Weights,
+    resnet50,
+    ResNet50_Weights,
+)
 from util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
@@ -59,19 +71,29 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 class BackboneBase(nn.Module):
 
-    def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
+    def __init__(self, name, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
         super().__init__()
         # for name, parameter in backbone.named_parameters(): # only train later layers # TODO do we want this?
         #     if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
         #         parameter.requires_grad_(False)
-        if return_interm_layers:
-            return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
-        else:
-            return_layers = {'layer4': "0"}
-        self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+        # The IntermediateLayerGetter logic below removes the last few layers in the CNNs (e.g., average pooling and classification layer)
+        # and returns a dictionary-style model. For example, for the EfficientNet, it returns an ordered dictionary where the key is '0'
+        # and the value is the model portion preceding the final average pooling and classification layers.
+        if "resnet" in name:
+            if return_interm_layers:
+                return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
+            else:
+                return_layers = {'layer4': "0"}
+            self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+        else:  # efficientnet
+            return_layers = {"features": "0"}
+            self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+                
         self.num_channels = num_channels
 
     def forward(self, tensor):
+        # 第一版的ACT没有做 preprocess
+        # tensor = self.preprocess(tensor)
         xs = self.body(tensor)
         return xs
         # out: Dict[str, NestedTensor] = {}
@@ -89,11 +111,49 @@ class Backbone(BackboneBase):
                  train_backbone: bool,
                  return_interm_layers: bool,
                  dilation: bool):
-        backbone = getattr(torchvision.models, name)(
-            replace_stride_with_dilation=[False, False, dilation],
-            weights=is_main_process(), norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
-        num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
-        super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
+        # Load pretrained weights.
+        if name == "resnet18":
+            weights = ResNet18_Weights.DEFAULT
+            num_channels = 512
+        elif name == "resnet34":
+            weights = ResNet34_Weights.DEFAULT
+            num_channels = 512
+        elif name == "resnet50":
+            weights = ResNet50_Weights.DEFAULT
+            num_channels = 2048
+        elif name == "efficientnet_b0":
+            weights = EfficientNet_B0_Weights.DEFAULT
+            num_channels = 1280
+        elif name == "efficientnet_b3":
+            weights = EfficientNet_B3_Weights.DEFAULT
+            num_channels = 1536
+        else:
+            raise ValueError
+        
+        # Initialize pretrained model.
+        if "resnet" in name:
+            backbone = getattr(torchvision.models, name)(
+                replace_stride_with_dilation=[False, False, dilation],
+                weights=weights,
+                norm_layer=FrozenBatchNorm2d,
+            )  # pretrained
+        else:  # efficientnet
+            backbone = getattr(torchvision.models, name)(
+                weights=weights, norm_layer=FrozenBatchNorm2d
+            )  # pretrained
+            
+       
+        super().__init__(name, backbone, train_backbone, num_channels, return_interm_layers)
+        
+        # Get image preprocessing function.
+        self.preprocess = (weights.transforms())  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
+        
+        # backbone = getattr(torchvision.models, name)(
+        #     replace_stride_with_dilation=[False, False, dilation],
+        #     weights=is_main_process(), norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
+        
+        # num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
+        # super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 
 
 class Joiner(nn.Sequential):
@@ -116,6 +176,7 @@ def build_backbone(args):
     position_embedding = build_position_encoding(args)
     train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks
+    
     backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels

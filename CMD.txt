@@ -27,7 +27,7 @@ python3 act/imitate_episodes_sawyer2.py \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 3000  --lr 1e-5 \
     --seed 0 \
-    --backbone resnet18 \
+    --backbone efficientnet_b3 \
 ; \
 python3 act/imitate_episodes_sawyer2.py \
     --task_name sorting_program21 \
@@ -37,7 +37,7 @@ python3 act/imitate_episodes_sawyer2.py \
     --seed 0 \
     --eval \
     --temporal_agg \
-    --backbone resnet18 \
+    --backbone efficientnet_b3 \
 ; \
 python3 act/imitate_episodes_sawyer2.py \
     --task_name sorting_program22 \
@@ -86,3 +86,58 @@ CUDA_VISIBLE_DEVICES=7 python3 act/imitate_episodes_sawyer2.py \
   --seed 0 \
   --eval \
   --temporal_agg 
+  
+  
+python3 act/imitate_episodes_sawyer2.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 1000  --lr 1e-5 \
+    --seed 0 \
+    --backbone efficientnet_b3 \
+; \
+python3 act/imitate_episodes_sawyer2.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 1000  --lr 1e-5 \
+    --seed 0 \
+    --eval \
+    --temporal_agg \
+    --backbone efficientnet_b3
+; \
+python3 act/imitate_episodes_sawyer2.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 \
+    --seed 0 \
+    --backbone efficientnet_b3 \
+; \
+python3 act/imitate_episodes_sawyer2.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 \
+    --seed 0 \
+    --eval \
+    --temporal_agg \
+    --backbone efficientnet_b3
+    ; \
+python3 act/imitate_episodes_sawyer2.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 3000  --lr 1e-5 \
+    --seed 0 \
+    --backbone efficientnet_b3 \
+; \
+python3 act/imitate_episodes_sawyer2.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 3000  --lr 1e-5 \
+    --seed 0 \
+    --eval \
+    --temporal_agg \
+    --backbone efficientnet_b3
