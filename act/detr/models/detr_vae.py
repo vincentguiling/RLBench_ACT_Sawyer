@@ -139,6 +139,7 @@ class DETRVAE(nn.Module):
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
             hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
+            # 其中transformer的输入分别是：图像特征、图像特征位置编码、风格变量Z、joints映射后的，以及position embeddings (fixed)，权重丢进去，在训练的时候训练好的？？
         else:
             qpos = self.input_proj_robot_state(qpos)
             env_state = self.input_proj_env_state(env_state)
@@ -262,7 +263,7 @@ def build(args): # 核心模型部分 称为类VAE模型
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print("number of parameters: %.2fM" % (n_parameters/1e6,))
+    # print("number of parameters: %.2fM" % (n_parameters/1e6,))
 
     return model
 
@@ -284,7 +285,7 @@ def build_cnnmlp(args):
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print("number of parameters: %.2fM" % (n_parameters/1e6,))
+    # print("number of parameters: %.2fM" % (n_parameters/1e6,))
 
     return model
 

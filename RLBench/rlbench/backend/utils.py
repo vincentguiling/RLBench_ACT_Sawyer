@@ -38,7 +38,6 @@ PIL or standard image viewers.
 import numpy as np
 from PIL import Image
 
-
 def ClipFloatValues(float_array, min_value, max_value):
   """Clips values to the range [min_value, max_value].
 

@@ -34,8 +34,6 @@ def main(args):
     batch_size_val = args['batch_size']
     num_epochs = args['num_epochs']
     num_verification = args['num_verification']
-
-    print("num_verification:", num_verification)
     
     is_sim = True 
     if is_sim:
@@ -46,41 +44,36 @@ def main(args):
     num_episodes = task_config['num_episodes']
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
-
+    task_steps = task_config['task_steps'] if task_config['task_steps'] is not None else None
+    
     # fixed parameters
     state_dim = 15 # 左右机械臂，一共7*2 = 14,7+1
     lr_backbone = 1e-5
-    
     backbone = args['backbone']
-    print("backbone:",backbone)
-    # backbone = 'resnet18' # 图像基础处理网络是ResNet18
-    if policy_class == 'ACT':
-        enc_layers = 4
-        dec_layers = 7
-        nheads = 8 # 8头注意力机制
-        policy_config = {'lr': args['lr'],
-                         'num_queries': args['chunk_size'],
-                         'kl_weight': args['kl_weight'],
-                         'hidden_dim': args['hidden_dim'],
-                         'dim_feedforward': args['dim_feedforward'],
-                         'lr_backbone': lr_backbone,
-                         'backbone': backbone,
-                         'enc_layers': enc_layers,
-                         'dec_layers': dec_layers,
-                         'nheads': nheads,
-                         'camera_names': camera_names,
-                         }
-    elif policy_class == 'CNNMLP':
-        policy_config = {'lr': args['lr'], 'lr_backbone': lr_backbone, 'backbone' : backbone, 'num_queries': 1,
-                         'camera_names': camera_names,}
-    else:
-        raise NotImplementedError
+    enc_layers = 4
+    dec_layers = 7
+    nheads = 8 # 8头注意力机制
+    policy_config = {'lr': args['lr'],
+                        'num_queries': args['chunk_size'],
+                        'kl_weight': args['kl_weight'],
+                        'hidden_dim': args['hidden_dim'],
+                        'dim_feedforward': args['dim_feedforward'],
+                        'lr_backbone': lr_backbone,
+                        'backbone': backbone,
+                        'enc_layers': enc_layers,
+                        'dec_layers': dec_layers,
+                        'nheads': nheads,
+                        'camera_names': camera_names,
+                        }
     
     # 增加参数保存
     chunk_size = args['chunk_size']
     batch_size = args['batch_size']
-    ckpt_dir = args['ckpt_dir'] + f'/{task_name}/{num_episodes}demo_{episode_len}step_{chunk_size}chunk_{batch_size}batch_{backbone}'
-    print(f"train on {camera_names}")
+    if task_steps == None:
+        ckpt_dir = args['ckpt_dir'] + f'/{task_name}/{num_episodes}demo_{chunk_size}chunk_{batch_size}batch_{backbone}'
+    else:
+        ckpt_dir = args['ckpt_dir'] + f'/{task_name}'
+        
     config = {
         'num_epochs': num_epochs,
         'ckpt_dir': ckpt_dir,
@@ -94,16 +87,67 @@ def main(args):
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
-        'real_robot': not is_sim
+        'real_robot': not is_sim,
+        'stats_dir': '<steps>_dataset_stats.pkl'
     }
-
+########################################################################################
     if is_eval: # 如果是验证的话
-        ckpt_names = [f'policy_best_epoch{num_epochs}.pth']
         results = []
-        for ckpt_name in ckpt_names:
-            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True, num_verification=num_verification) # 调用 eval_bc() 直接验证
-            results.append([ckpt_name, success_rate, avg_return])
+        from sim_env import make_sim_env
+        env = make_sim_env(task_name)
+        env_max_reward = 1
+        num_rollouts = num_verification
+        set_seed(10)
+        episode_returns = []
+        highest_rewards = []
+        for rollout_id in range(num_rollouts):
+            # rollout init
+            max_timesteps = episode_len[0] + episode_len[1]
+            qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+            target_qpos_list = []
+            image_list = [] # for visualization
+            qpos_list = []
+            gripper_state = 1
+            _, ts_obs = env.reset() # 重置帧数
+            # task steps run
+            for task_step_index in range(len(task_steps)):
+                
+                ckpt_name = f'{task_steps[task_step_index]}_policy_best.pth'  # 直接把地址发给他
+                config['camera_names'] = camera_names[task_step_index]
+                config['episode_len'] = episode_len[task_step_index] * 1.0
+                config['policy_config']['camera_names'] = camera_names[task_step_index]
+                config['stats_dir'] = f'{task_steps[task_step_index]}_dataset_stats.pkl'
+                rewards, gripper_state, ts_obs = eval_bc(config, ckpt_name, env, ts_obs, qpos_history, target_qpos_list, image_list, qpos_list, gripper_state) # 调用 eval_bc() 直接验证
+            
+            # for i in range(t+1): # clear the path history
+            #     path[i].clear_visualization()
+            rewards = np.array(rewards) # 
+            episode_return = np.sum(rewards[rewards!=None])
+            episode_returns.append(episode_return)
+            episode_highest_reward = np.max(rewards)
+            highest_rewards.append(episode_highest_reward)
+            # print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
+            print(f'{rollout_id} Rollout with {len(target_qpos_list)} steps : {episode_highest_reward==env_max_reward}')
+            save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video_{rollout_id}.mp4'))
 
+        success_rate = np.mean(np.array(highest_rewards) == env_max_reward) # 计算占比
+        avg_return = np.mean(episode_returns) # 计算平均数
+        summary_str = f'\nSuccess rate: {success_rate}\nAverage return: {avg_return}\n\n'
+        for r in range(env_max_reward+1):
+            more_or_equal_r = (np.array(highest_rewards) >= r).sum()
+            more_or_equal_r_rate = more_or_equal_r / num_rollouts
+            summary_str += f'Reward >= {r}: {more_or_equal_r}/{num_rollouts} = {more_or_equal_r_rate*100}%\n'
+
+        print(summary_str)
+        
+        results.append([ckpt_name, success_rate, avg_return])
+        # save success rate to txt
+        result_file_name = 'result' +  f'({more_or_equal_r_rate*100}%).txt'
+        with open(os.path.join(ckpt_dir, result_file_name), 'w') as f:
+            f.write(summary_str)
+            # f.write(repr(episode_returns))
+            f.write('\n\n')
+            f.write(repr(highest_rewards)) # 输出所有验证的最好奖励分数
         for ckpt_name, success_rate, avg_return in results:
             print(f'{ckpt_name}: {success_rate=} {avg_return=}')
         print()
@@ -141,8 +185,6 @@ def make_optimizer(policy_class, policy):
         raise NotImplementedError
     return optimizer
 
-from rlbench.backend.utils import float_array_to_rgb_image
-from rlbench.backend.const import DEPTH_SCALE
 def get_image(ts, camera_names): # 推理的时候采用到
     curr_images = []
     
@@ -168,148 +210,129 @@ def get_image(ts, camera_names): # 推理的时候采用到
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
     return curr_image
 
-def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
-    set_seed(10)
+def eval_bc(config, ckpt_name, env, ts_obs, qpos_history, target_qpos_list, image_list, qpos_list, gripper_state):
     ckpt_dir = config['ckpt_dir']
-    state_dim = config['state_dim']
-    real_robot = config['real_robot']
     policy_class = config['policy_class']
     policy_config = config['policy_config']
     camera_names = config['camera_names']
-    max_timesteps = config['episode_len']
-    task_name = config['task_name']
+    max_timesteps = int(config['episode_len'])
     temporal_agg = config['temporal_agg']
+    stats_dir = config['stats_dir']
 
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
+    # print(f'Loaded: {ckpt_path}')
     policy = make_policy(policy_class, policy_config)
-    loading_status = policy.load_state_dict(torch.load(ckpt_path))
-    ckpt_name0 =ckpt_name.split('.')[0]
-    
-    print(loading_status)
+    policy.load_state_dict(torch.load(ckpt_path))
+
     policy.cuda()
-    policy.eval() # 将policy配置为eval模式
-    print(f'Loaded: {ckpt_path}')
-    stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
+    policy.eval()
+    
+    stats_path = os.path.join(ckpt_dir, stats_dir)
     with open(stats_path, 'rb') as f:
         stats = pickle.load(f)
     
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
-    
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
-    # load environment
-    if not real_robot:
-        from sim_env import make_sim_env
-        env = make_sim_env(task_name)
-        env_max_reward = 1 # env.task.max_reward
-    # chunk_size = num_queries
     query_frequency = policy_config['num_queries']
     if temporal_agg:
         query_frequency = 1
         num_queries = policy_config['num_queries']
-        
-    ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.0) # may increase for real-world tasks
-    ##########################################################################################################
     
-    num_rollouts = num_verification # 验证 50 次
+    ### evaluation loop
+    if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
+        all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
     
-    episode_returns = []
-    highest_rewards = []
-    for rollout_id in range(num_rollouts):
-        gripper_state_now = 1
-        _, ts_obs = env.reset() # 重置帧数
+    rewards = []
+    with torch.inference_mode():
+        path = []
+        t = 0
+        for timestep in range(max_timesteps): # 最大帧数
+            obs = ts_obs
+            # image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
+            image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
+            qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 + 7 = 15
+            qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
+            qpos = pre_process_qpos(qpos_numpy)
+            qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
+            qpos_history[:, t] = qpos
+            curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
-        ### evaluation loop
-        if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
-            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
+            ### query policy
+            if t % query_frequency == 0:
+                all_actions = policy(qpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+                
+                # 核心重点！！！
+            if temporal_agg: # 做了一个 Action Chunking
+                all_time_actions[[t], t:t+num_queries] = all_actions
+                actions_for_curr_step = all_time_actions[:, t]
 
-        qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
-        image_list = [] # for visualization
-        qpos_list = []
-        target_qpos_list = []
-        rewards = []
-        
-        with torch.inference_mode():
-            path = []
-            t = 0
-            for timestep in range(max_timesteps): # 最大帧数
-                obs = ts_obs
-                if(rollout_id%5 == 0): # 限制保存数量，增快速度
-                    # image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
-                    image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
+                actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
+                actions_for_curr_step = actions_for_curr_step[actions_populated]
+                k = 0.25
+                exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
+                exp_weights = exp_weights / exp_weights.sum() # 做了一个归一化
+                exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # 压缩维度
+                raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
                 
-                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 + 7 = 15
-                qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
-                qpos = pre_process_qpos(qpos_numpy)
-                qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
-                qpos_history[:, t] = qpos
+            else: # 如果没用的话，等于就是 100帧才预测一次，然后挨着执行
+                raw_action = all_actions[:, t % query_frequency]
+            
+            raw_action = raw_action.squeeze(0).cpu().numpy()
+            action = post_process(raw_action) 
+            target_qpos = action
+            
+            try:
+                next_gripper_position = action[0:3] # next 
+                next_gripper_quaternion = action[3:7]
+                path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True)) # 
+                gripper_value = action[7]
                 
-                curr_image = get_image(obs, camera_names) # 获取帧数据的图像
+                # 夹爪控制#############################################################################
+                if gripper_value < 0.7 and gripper_state == 1 :
+                    print("close_gripper")
+                    gripper_state = 0
+                    env._robot.gripper.actuate(0, 0.05)
+                elif gripper_value > 0.7 and gripper_state == 0 :
+                    print("open_gripper")
+                    gripper_state = 1
+                    env._robot.gripper.actuate(1.0,0.02)
+                
+                path[t].visualize() # 在仿真环境中画出轨迹
+                done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了
+                while done != 1: # 如果 done 是 False 则执行
+                    done = path[t].step() # ArmConfigurationPath类型的step运行载入下一帧动作
+                    env._scene.step() # Scene 步进
+                    
+                ts_obs = env._scene.get_observation()
+                reward, _ = env._task.success() # 任务是否完成状态读取
+                qpos_list.append(qpos_numpy)
+                target_qpos_list.append(target_qpos)
+                rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
+                # if reward >= 1 :
+                #     break
+            except ConfigurationPathError: 
+                print("ConfigurationPathError ", t) # , "path lens: ",len(path))
+                break # 跳出推理循环
 
-                ### query policy
-                if config['policy_class'] == "ACT":
-                    if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
-                        
-                        # 核心重点！！！
-                    if temporal_agg: # 做了一个 Action Chunking
-                        all_time_actions[[t], t:t+num_queries] = all_actions
-                        actions_for_curr_step = all_time_actions[:, t]
-                        
-                        # 在生成的多个序列中不是简单的平均，又做了一个运算（时间集成？？）
-                        actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
-                        actions_for_curr_step = actions_for_curr_step[actions_populated]
-                        ############################################################################################################################################
-                        k = 0.25
-                        ############################################################################################################################################
-                        exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
-                        exp_weights = exp_weights / exp_weights.sum() # 做了一个归一化
-                        exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # 压缩维度
-                        
-                        raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
-                        
-                    else: # 如果没用的话，等于就是 100帧才预测一次，然后挨着执行
-                        raw_action = all_actions[:, t % query_frequency]
-                        
-                elif config['policy_class'] == "CNNMLP":
-                    raw_action = policy(qpos, curr_image) 
-                else:
-                    raise NotImplementedError
+                # 不跳出，而是前面的2/3步数。在相同的观测下面有相同的推理？？？，不是，是反复迭代退回了
+                # np.random.seed(0)
+                t_back = (t*8)//10
                 
-                ### post-process actions
-                raw_action = raw_action.squeeze(0).cpu().numpy()
-                action = post_process(raw_action) 
-                target_qpos = action
-                
-                ###################################################
-                # 将qpos作为action
-                # ts_obs, reward, terminate = env.step(target_qpos)
-                # qpos_list.append(qpos_numpy)
-                # target_qpos_list.append(target_qpos)
-                # rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
-                ###################################################
-                
-                # 将gpos作为action
+                back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_qpos_list[t_back][:7]]
+                for i in range(t - t_back):
+                    path.pop()
+                    qpos_list.pop()
+                    target_qpos_list.pop()
+                t = t_back
+                    
+                # back_gripper_pose = target_qpos_list[(t*9)//10][:7]
+                next_gripper_position = back_gripper_pose[0:3] # next 
+                next_gripper_quaternion = back_gripper_pose[3:7]
                 try:
-                    next_gripper_position = action[0:3] # next 
-                    next_gripper_quaternion = action[3:7]
+                    # path.pop()
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
-                    gripper_state = action[7]
-                    # print(gripper_state)
-                    
-                    # 夹爪控制###############################################################################################
-                    if gripper_state < 0.5 and gripper_state_now == 1 :
-                        print(gripper_state,"close_gripper")
-                        gripper_state_now = 0
-                        env._robot.gripper.actuate(0, 0.04)
-                    elif gripper_state > 0.5 and gripper_state_now == 0 :
-                        print(gripper_state,"open_gripper")
-                        gripper_state_now = 1
-                        env._robot.gripper.actuate(1.0,0.04)
-                    
-                    # print("steps: ", t, end=' ')
                     path[t].visualize() # 在仿真环境中画出轨迹
                     
                     done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了
@@ -318,83 +341,15 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                         env._scene.step() # Scene 步进
                         
                     ts_obs = env._scene.get_observation()
-                    reward, _ = env._task.success() # 任务是否完成状态读取
                     qpos_list.append(qpos_numpy)
-                    target_qpos_list.append(target_qpos)
-                    rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
-                    # if reward >= 1 :
-                    #     break
-                except ConfigurationPathError: 
-                    print("ConfigurationPathError ", t) # , "path lens: ",len(path))
-                    break # 跳出推理循环
-
-                    # 不跳出，而是前面的2/3步数。在相同的观测下面有相同的推理？？？，不是，是反复迭代退回了
-                    # np.random.seed(0)
-                    t_back = (t*8)//10
+                    target_qpos_list.append(target_qpos)    
                     
-                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_qpos_list[t_back][:7]]
-                    for i in range(t - t_back):
-                        path.pop()
-                        qpos_list.pop()
-                        target_qpos_list.pop()
-                    t = t_back
-                        
-                    # back_gripper_pose = target_qpos_list[(t*9)//10][:7]
-                    next_gripper_position = back_gripper_pose[0:3] # next 
-                    next_gripper_quaternion = back_gripper_pose[3:7]
-                    try:
-                        # path.pop()
-                        path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
-                        path[t].visualize() # 在仿真环境中画出轨迹
-                        
-                        done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了
-                        while done != 1: # 如果 done 是 False 则执行
-                            done = path[t].step() # ArmConfigurationPath类型的step运行载入下一帧动作
-                            env._scene.step() # Scene 步进
-                            
-                        ts_obs = env._scene.get_observation()
-                        qpos_list.append(qpos_numpy)
-                        target_qpos_list.append(target_qpos)    
-                        
-                    except ConfigurationPathError:
-                        print("ConfigurationPathError ConfigurationPathError")
-                        break # 跳出推理循环
-                t = t + 1
-                
-            plt.close()
-            
-        # for i in range(t+1): # clear the path history
-        #     path[i].clear_visualization()
-        rewards = np.array(rewards) # 
-        episode_return = np.sum(rewards[rewards!=None])
-        episode_returns.append(episode_return)
-        episode_highest_reward = np.max(rewards)
-        highest_rewards.append(episode_highest_reward)
-        # print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
-        print(f'{rollout_id} Rollout with {t} steps : {episode_highest_reward==env_max_reward}')
-        if(rollout_id%5 == 0): # 限制保存数量，增快速度
-            if save_episode:
-                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video_{ckpt_name0}_{rollout_id}.mp4'))
+                except ConfigurationPathError:
+                    print("ConfigurationPathError ConfigurationPathError")
+                    break # 跳出推理循环
+            t = t + 1
 
-    success_rate = np.mean(np.array(highest_rewards) == env_max_reward) # 计算占比
-    avg_return = np.mean(episode_returns) # 计算平均数
-    summary_str = f'\nSuccess rate: {success_rate}\nAverage return: {avg_return}\n\n'
-    for r in range(env_max_reward+1):
-        more_or_equal_r = (np.array(highest_rewards) >= r).sum()
-        more_or_equal_r_rate = more_or_equal_r / num_rollouts
-        summary_str += f'Reward >= {r}: {more_or_equal_r}/{num_rollouts} = {more_or_equal_r_rate*100}%\n'
-
-    print(summary_str)
-
-    # save success rate to txt
-    result_file_name = 'result_' + ckpt_name0 + f'({more_or_equal_r_rate*100}%).txt'
-    with open(os.path.join(ckpt_dir, result_file_name), 'w') as f:
-        f.write(summary_str)
-        # f.write(repr(episode_returns))
-        f.write('\n\n')
-        f.write(repr(highest_rewards)) # 输出所有验证的最好奖励分数
-
-    return success_rate, avg_return
+    return rewards, gripper_state, ts_obs
 
 
 def forward_pass(data, policy):
@@ -538,7 +493,7 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True) # 权重文件保存地址
     
     # 模型策略类型，本文提出的ACT，用来对比的是CNNMLP
-    parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True) 
+    parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=False) 
     parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
     
     # 训练参数

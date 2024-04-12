@@ -2,9 +2,10 @@ from multiprocessing import Process, Manager
 
 from pyrep.const import RenderMode
 
-from rlbench.observation_config import ObservationConfig
+from rlbench.observation_config import ObservationConfig, CameraConfig
 from rlbench.action_modes.action_mode import MoveArmThenGripper
 from rlbench.action_modes.arm_action_modes import JointVelocity, JointPosition
+from rlbench.noise_model import GaussianNoise
 from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.backend.utils import task_file_to_task_class
 from rlbench.environment import Environment
@@ -23,6 +24,9 @@ from absl import flags
 import time
 import h5py
 
+import cv2
+os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = '/home/boxjod/Gym/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04'  # 必须要这个才可以import cv2
+
 FLAGS = flags.FLAGS
 
 # 使用还是 --tasks reach_target
@@ -31,7 +35,7 @@ flags.DEFINE_string('save_path',
                     'Where to save the demos.')
 flags.DEFINE_list('tasks', [],
                   'The tasks to collect. If empty, all tasks are collected.')
-flags.DEFINE_list('image_size', [640, 480],# [128, 128], ACT是读取的 [height x width]，coppliasim是 [width x height]
+flags.DEFINE_list('image_size', [160, 120],# [128, 128], ACT是读取的 [height x width]，coppliasim是 [width x height]
                   'The size of the images tp save.')
 flags.DEFINE_enum('renderer',  'opengl3', ['opengl', 'opengl3'],
                   'The renderer to use. opengl does not include shadows, '
@@ -42,24 +46,14 @@ flags.DEFINE_integer('episodes_per_task', 10,
                      'The number of episodes to collect per task.')
 flags.DEFINE_integer('variations', -1,
                      'Number of variations to collect per task. -1 for all.')
-flags.DEFINE_integer('episode_len', 0,
-                     'the lenght of one episode, means how many steps of one episode. if not assign, not strict for the steps of generate')
+# flags.DEFINE_integer('episode_len', 0,
+#                      'the lenght of one episode, means how many steps of one episode. if not assign, not strict for the steps of generate')
 
 np.set_printoptions(linewidth=200)
 
 def check_and_make(dir):
     if not os.path.exists(dir):
         os.makedirs(dir)
-
-def matrix_to_pose(matrix): # 定义一个matrix。现在要做的事，判断一下relate to robot.ram的 pose 和 matrix 里面的(x,y,z)是否相同，如果相同，则不需要我来变换了 【一样的】   
-    pose = matrix
-    # obs.gripper_matrix: [[-9.40002918e-01  2.54769984e-04  3.41166764e-01  4.29283112e-01]
-    #                      [ 2.09459744e-04  9.99999940e-01 -1.69645005e-04  1.60404623e-01]
-    #                      [-3.41166824e-01 -8.80060616e-05 -9.40002918e-01  7.26700842e-01]
-    #                      [ 0.00000000e+00  0.00000000e+00  0.00000000e+00  1.00000000e+00]]
-                        #  [ 4.29312766e-01  1.60412401e-01  7.26682484e-01  1.11043439e-04  9.84890819e-01 -4.92185354e-05  1.73176572e-01]
-    return pose
-    # 什么事robot.arm?在哪里？
 
 def save_demo(demo, example_path, ex_idx):
     data_dict = {
@@ -75,13 +69,21 @@ def save_demo(demo, example_path, ex_idx):
     for i, obs in enumerate(demo): 
         if i != 0: # action是下一步的姿态
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
-        
-        # data_dict['/observations/images/wrist'].append(obs.wrist_rgb*255) # 480， 640， 3 # 从最开始就错了，为什么要*255！
            
         data_dict['/observations/images/wrist'].append(obs.wrist_rgb) # 480， 640， 3
-        wrist_depth = utils.float_array_to_rgb_image(obs.wrist_depth, scale_factor=DEPTH_SCALE)
-        wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
+        
+        # wrist_depth = np.clip(obs.wrist_depth*255, 0, 255).astype(np.uint8)
+        
+        # depth_min = np.min(wrist_depth0) # 不关注爪子和地板
+        # depth_max = np.max(wrist_depth0)
+        # print(depth_min, depth_max)
+        wrist_depth0 = obs.wrist_depth*255.0*5
+        wrist_depth = cv2.applyColorMap(cv2.convertScaleAbs(wrist_depth0, alpha=1), cv2.COLORMAP_JET)
+        
+        # wrist_depth = utils.float_array_to_rgb_image(obs.wrist_depth, scale_factor=DEPTH_SCALE)
+        # wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
         data_dict['/observations/images/wrist_depth'].append(wrist_depth)
+        
         data_dict['/observations/images/head'].append(obs.head_rgb)
         data_dict['/observations/qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
         data_dict['/observations/gpos'].append(obs.gripper_pose)
@@ -95,9 +97,9 @@ def save_demo(demo, example_path, ex_idx):
         action = root.create_dataset('action', (max_timesteps, 8))
         obs = root.create_group('observations')
         image = obs.create_group('images')
-        image.create_dataset('wrist', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
-        image.create_dataset('wrist_depth', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
-        image.create_dataset('head', (max_timesteps, 480, 640, 3), dtype='uint8',chunks=(1, 480, 640, 3), ) 
+        image.create_dataset('wrist', (max_timesteps, 120, 160, 3), dtype='uint8',chunks=(1, 120, 160, 3), ) 
+        image.create_dataset('wrist_depth', (max_timesteps, 120, 160, 3), dtype='uint8',chunks=(1, 120, 160, 3), ) 
+        image.create_dataset('head', (max_timesteps, 120, 160, 3), dtype='uint8',chunks=(1, 120, 160, 3), ) 
         qpos = obs.create_dataset('qpos', (max_timesteps, 8))
         gpos = obs.create_dataset('gpos', (max_timesteps, 7))
         
@@ -110,7 +112,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     all the episodes_per_task for that variation."""
 
     # Initialise each thread with random seed
-    np.random.seed(None)
+    np.random.seed(1000) # 确定生成的演示都是一样的（避免服务器和本机的差距），但是可能一直都不好
     num_tasks = len(tasks)
     img_size = list(map(int, FLAGS.image_size))
     obs_config = ObservationConfig()
@@ -131,7 +133,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     
     headless_val = False
     if socket.gethostname() != 'XJ':
-        headless_val = True
+        headless_val = False
     
     ##############################################################################################################
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
@@ -187,12 +189,16 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
                   '// Variation:', my_variation_count, '// Demo:', ex_idx)
             
             attempts = 10 # 每次episode给10次机会，但每一个demo默认又有10次机会，一共一个episode由100次机会
+            from constants import SIM_TASK_CONFIGS
+            print(FLAGS.tasks)
+            task_config = SIM_TASK_CONFIGS[FLAGS.tasks[0]]
+            episode_len = task_config['episode_len']
             while attempts > 0:
                 try:
                     # TODO: for now we do the explicit looping.
-                    #############################################################################################################################################
-                    demo, = task_env.get_demos(amount=1, live_demos=True, episode_len=FLAGS.episode_len)
-                    #############################################################################################################################################
+                    ################################################################################################
+                    demo, = task_env.get_demos(amount=1, live_demos=True, episode_len=episode_len)
+                    ################################################################################################
                 except Exception as e: 
                     attempts -= 1
                     if attempts > 0:

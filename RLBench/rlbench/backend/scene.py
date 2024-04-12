@@ -345,7 +345,7 @@ class Scene(object):
     def get_demo(self, record: bool = True,
                  callable_each_step: Callable[[Observation], None] = None,
                  randomly_place: bool = True,
-                 episode_len: int = 0) -> Demo:
+                 episode_len: int = 50) -> Demo:
         """Returns a demo (list of observations)"""
 
         if not self._has_init_task:
@@ -387,7 +387,9 @@ class Scene(object):
                 
                 try:
                     if len(ext) > 0 and 'steps(' in ext:
-                        steps_len = int(ext[ext.index('steps(') + 6])
+                        left = ext.index('steps(')+6
+                        right = ext[left:].index(')')
+                        steps_len = int(ext[left:left+right])
                         path, is_linear = point.get_path(steps=steps_len)
                     elif len(waypoints) == 1:
                         path, is_linear = point.get_path(steps=episode_len-1)
@@ -483,7 +485,7 @@ class Scene(object):
                 if success:
                     break
                     
-        success, term = self.task.success()
+        # success, term = self.task.success()
         
         print("the lens of episode:", self._lens_episode_count) # 输出episode的长度
         
@@ -491,7 +493,7 @@ class Scene(object):
             raise DemoError('Demo was completed, but was not successful.',
                             self.task)
         
-        if episode_len != 0 and self._lens_episode_count != episode_len : 
+        if episode_len != 50 and self._lens_episode_count != episode_len : 
             raise DemoError('Demo was completed, but was not the set lens of episode.',
                             self.task)
         

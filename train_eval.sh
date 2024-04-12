@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # 生产新的数据，里面没有nolinear
-# python3 RLBench/tools/dataset_generator_sawyer_act2.py \
-#     --save_path Datasets \
-#     --tasks sorting_program \
-#     --variations 1 \
-#     --episodes_per_task 50 \
-#     --episode_len 31
+python3 RLBench/tools/dataset_generator_sawyer_act2.py \
+    --save_path Datasets \
+    --tasks sorting_program \
+    --variations 1 \
+    --episodes_per_task 50 \
+    --episode_len 31
     
 epoch_list=(1000 2000 3000)
 batch_size=(8)

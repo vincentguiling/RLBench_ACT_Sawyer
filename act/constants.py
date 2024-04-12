@@ -34,8 +34,31 @@ SIM_TASK_CONFIGS = {
         'episode_len': 31,
         'camera_names': ['wrist','wrist_depth']
     },
-
-
+    'sorting_program2':{ 
+        'dataset_dir': DATA_DIR + '/sorting_program2/variation0',
+        'num_episodes': 50,
+        'episode_len': 88,
+        'camera_names': ['wrist'] # , 'wrist_depth', 'head'
+    },
+    'sorting_program21':{ 
+        'dataset_dir': DATA_DIR + '/sorting_program21/variation0',
+        'num_episodes': 50,
+        'episode_len': 32,
+        'camera_names': ['wrist'] # , 'wrist_depth', 'head'
+    },
+    'sorting_program22':{ 
+        'dataset_dir': DATA_DIR + '/sorting_program22/variation0',
+        'num_episodes': 50,
+        'episode_len': 63,
+        'camera_names': ['wrist', 'head'] # , 'wrist_depth'
+    },
+    'sorting_program3':{ 
+        'dataset_dir': DATA_DIR + '/sorting_program3/variation0',
+        'num_episodes': 50,
+        'episode_len': [32,63],
+        'camera_names': [['wrist'], ['wrist', 'head']],
+        'task_steps':['sorting_program21', 'sorting_program22']
+    },
 }
 
 ### Simulation envs fixed constants

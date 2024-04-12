@@ -1,6 +1,3 @@
-#PyRep
-from pyrep.robots.configuration_paths.arm_configuration_path import ArmConfigurationPath
-
 # rlbench
 from rlbench.observation_config import ObservationConfig
 from rlbench.action_modes.action_mode import MoveArmThenGripper
@@ -10,9 +7,6 @@ from rlbench.backend.utils import task_file_to_task_class
 
 from rlbench.environment import Environment
 from rlbench.backend.exceptions import *
-import numpy as np
-import h5py
-import cv2
 import os, socket
 BOX_POSE = [None] # to be changed from outside # 工作区间里面随机小球出现的boundary
 
@@ -39,19 +33,20 @@ def make_sim_env(task_name):
         os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/ubuntu/data0/liangws/peract_root/CoppeliaSim"
     
     # 1. 设置仿真环境的配置文件
-    img_size = [640,480] # 图片格式大小
+    img_size = [160, 120] # 图片格式大小
     
     obs_config = ObservationConfig()
     
     obs_config.set_all(False)
     obs_config.wrist_camera.set_all(True)
     obs_config.head_camera.set_all(True)
+    obs_config.front_camera.set_all(True)
     obs_config.set_all_low_dim(True)
     
     obs_config.wrist_camera.image_size = img_size
     obs_config.head_camera.image_size = img_size
     obs_config.wrist_camera.depth_in_meters = False
-    # obs_config.front_camera.image_size = img_size
+    obs_config.front_camera.image_size = img_size
     
     headless_val = False
     if socket.gethostname() != 'XJ':
@@ -64,7 +59,6 @@ def make_sim_env(task_name):
         headless=headless_val,
         robot_setup='sawyer'
         )
-    print(rlbench_env)
     
     rlbench_env.launch()
     # print("#########################################################")

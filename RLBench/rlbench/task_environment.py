@@ -92,7 +92,7 @@ class TaskEnvironment(object):
         # Returns a list of descriptions and the first observation
         
         ####################################################################################################################################
-        # 每次初始化之后先到第一个waypoint
+        # 每次初始化之后直接跳过no_record的步骤
         waypoints = self._scene.task.get_waypoints()
                   
         if len(waypoints) == 0:
