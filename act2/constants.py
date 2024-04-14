@@ -13,7 +13,7 @@ SIM_TASK_CONFIGS = {
     'sorting_program21':{ # 抓取
         # 'dataset_dir': DATA_DIR + '/sorting_program21/variation0',# 单个颜色
         'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色个颜色
-        'num_episodes': 50,
+        'num_episodes': 100,
         'episode_len': 32,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },

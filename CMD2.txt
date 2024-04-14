@@ -2,14 +2,14 @@
 bash /home/boxjod/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04/coppeliaSim.sh  
 
 # 创建和修改测试任务
-python3 RLBench/tools/task_builder_sawyer.py --task sorting_program211
+python3 RLBench/tools/task_builder_sawyer.py --task sorting_program21
 
 # 演示数据集生成    
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --save_path Datasets \
     --tasks sorting_program21 \
     --variations 2 \
-    --episodes_per_task 25 \
+    --episodes_per_task 50 \
 ; \
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --save_path Datasets \
@@ -34,6 +34,7 @@ python act2/imitate_episodes_sawyer4.py \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     ; \
+    
 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
@@ -45,19 +46,18 @@ python act2/imitate_episodes_sawyer4.py \
 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 4 --dim_feedforward 3200 \
     --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
     --use_language --language_encoder distilbert    \
     ; \
 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 4 --dim_feedforward 3200 \
     --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
     --use_language --language_encoder distilbert    \
-    --eval --temporal_agg 
-    
-    
+    --eval --temporal_agg \
+    ; \
 
 
 

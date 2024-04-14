@@ -1,6 +1,7 @@
 {
   "workbench.editor.wrapTabs": true,
   "python.analysis.extraPaths": [
-    "./act2/command_script"
+    "./act2/command_script",
+    "./RLBench/tools"
   ]
 }

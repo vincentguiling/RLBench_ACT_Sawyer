@@ -254,7 +254,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
         gripper_flag = 1
         
         # var_target = env.variation_count()
-        env.set_variation(1)
+        # env.set_variation(1)
         descriptions, ts_obs = env.reset() # 重置帧数
         # print(f"the task name is {descriptions[0]}")
         ### evaluation loop
