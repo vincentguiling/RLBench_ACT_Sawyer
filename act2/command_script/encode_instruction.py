@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 import sys
 # sys.path.append("$PATH_TO_YAY_ROBOT/src")  # to import aloha
-from .command_utils import initialize_model_and_tokenizer, encode_text
+from command_utils import initialize_model_and_tokenizer, encode_text
 
 def process_file(file_path, encoder, tokenizer, model):
     with open(file_path, "r") as file:

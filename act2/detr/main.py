@@ -68,7 +68,10 @@ def get_args_parser():
     parser.add_argument('--command', action='store', type=str, help='comma-separated list of commands', default='', required=False)
     parser.add_argument('--use_language', action='store_true')
     parser.add_argument('--language_encoder', action='store', type=str, choices=['distilbert', 'clip'], default='distilbert', help='Type of language encoder to use: distilbert or clip', required=False)
-
+    
+    # varitation
+    parser.add_argument('--variation', action='store', type=int, default=1, help='the variations of the task', required=False)
+    
     return parser
 
 

@@ -57,11 +57,9 @@ def make_sim_env(task_name):
         action_mode=MoveArmThenGripper(JointPosition(), Discrete()),
         obs_config=obs_config,
         headless=headless_val,
-        robot_setup='sawyer'
-        )
+        robot_setup='sawyer')
     
     rlbench_env.launch()
-    # print("#########################################################")
     rlbench_env._pyrep.step_ui()
 
     # 3. 挂载任务

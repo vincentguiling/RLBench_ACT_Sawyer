@@ -42,52 +42,47 @@ class EpisodicDataset(torch.utils.data.Dataset):
         
         ######################################################################################################
         if self.use_language or FILTER_MISTAKES:
+            
             json_name = f"episode_{episode_id}_encoded_{self.language_encoder}.json"
             encoded_json_path = os.path.join(self.dataset_dir, json_name)
-
+            
             with open(encoded_json_path, "r") as f:
                 episode_data = json.load(f)
-                
-        if len(self.command_list) > 0:
-            # If command_list is provided, use the JSON file to determine the relevant timesteps
-            matching_segments = []
+        
+        # print(f"{len(self.command_list)=}")
+        # if len(self.command_list) > 0: # 为什么训练的时候读取数据集要直接给指令呢？还要给这种格式的[{"command": "grasp the red target", "start_timestep": 0, "end_timestep": 31, "type": "instruction"}]
+        #     # If command_list is provided, use the JSON file to determine the relevant timesteps
+        #     matching_segments = []
 
-            for segment in episode_data:
-                if segment["command"] in self.command_list:
-                    current_idx = episode_data.index(segment)
-                    if (
-                        current_idx + 1 < len(episode_data)
-                        and episode_data[current_idx + 1]["type"] == "correction"
-                    ):
-                        continue
-                    else:
-                        matching_segments.append(segment)        
-            # Choose a segment randomly among the matching segments
-            chosen_segment = random.choice(matching_segments)
+        #     for segment in episode_data:
+        #         if segment["command"] in self.command_list: # 筛选和输入commands一样的内容
+        #             current_idx = episode_data.index(segment)
+        #             if (current_idx + 1 < len(episode_data)and episode_data[current_idx + 1]["type"] == "correction"):
+        #                 continue # 如果随机产生的 current_idx则取消是纠正的指令
+        #             else: 
+        #                 matching_segments.append(segment)        
+        #     # Choose a segment randomly among the matching segments
+        #     chosen_segment = random.choice(matching_segments) # 然后在随机选，从match匹配的里面选
 
-            segment_start, segment_end = (
-                chosen_segment["start_timestep"],
-                chosen_segment["end_timestep"],
-            )
-            if self.use_language:
-                command_embedding = torch.tensor(chosen_segment["embedding"]).squeeze()
+        #     segment_start, segment_end = (
+        #         chosen_segment["start_timestep"],
+        #         chosen_segment["end_timestep"],
+        #     )
+        #     if self.use_language:
+        #         command_embedding = torch.tensor(chosen_segment["embedding"]).squeeze()
 
-            if segment_start is None or segment_end is None:
-                raise ValueError(f"Command segment not found for episode {episode_id}")    
-        elif self.use_language or FILTER_MISTAKES:
+        #     if segment_start is None or segment_end is None:
+        #         raise ValueError(f"Command segment not found for episode {episode_id}")   
+             
+        if self.use_language or FILTER_MISTAKES:
             while True:
                 # Randomly sample a segment
-                segment = np.random.choice(episode_data)
+                
+                segment = np.random.choice(episode_data) # 从所有数据里面随机选，没有筛选
                 current_idx = episode_data.index(segment)
-                if (
-                    current_idx + 1 < len(episode_data)
-                    and episode_data[current_idx + 1]["type"] == "correction"
-                ):
+                if (current_idx + 1 < len(episode_data) and episode_data[current_idx + 1]["type"] == "correction"):
                     continue
-                segment_start, segment_end = (
-                    segment["start_timestep"],
-                    segment["end_timestep"],
-                )
+                segment_start, segment_end = (segment["start_timestep"],segment["end_timestep"],)
                 # if end and start are too close, skip
                 if segment_end - segment_start + 1 < 20:
                     continue

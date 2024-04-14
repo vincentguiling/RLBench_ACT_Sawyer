@@ -1,3 +1,6 @@
 {
-  "workbench.editor.wrapTabs": true
+  "workbench.editor.wrapTabs": true,
+  "python.analysis.extraPaths": [
+    "./act2/command_script"
+  ]
 }

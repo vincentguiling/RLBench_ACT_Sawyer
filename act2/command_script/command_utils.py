@@ -119,7 +119,7 @@ def initialize_model_and_tokenizer(encoder):
         model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch16")
     else:
         raise ValueError("Unknown encoder type. Please use 'distilbert' or 'clip'.")
-    print(f"initialize_model_and_tokenizer")
+    # print(f"initialize_model_and_tokenizer")
     return tokenizer, model
 
 

@@ -43,28 +43,34 @@ flags.DEFINE_enum('renderer',  'opengl3', ['opengl', 'opengl3'],
                   'but is faster.')
 flags.DEFINE_integer('processes', 1,
                      'The number of parallel processes during collection.')
-flags.DEFINE_integer('episodes_per_task', 10,
+flags.DEFINE_integer('episodes_per_task', 50,
                      'The number of episodes to collect per task.')
 flags.DEFINE_integer('variations', -1,
                      'Number of variations to collect per task. -1 for all.')
+flags.DEFINE_string('encode_command', 'distilbert',
+                     'If directly generate the command encoder.')
 # flags.DEFINE_integer('episode_len', 0,
 #                      'the lenght of one episode, means how many steps of one episode. if not assign, not strict for the steps of generate')
 
 np.set_printoptions(linewidth=200)
 
-def create_commands_json_files(data_dir,commands):
-
-    commands = {"reach to the red target": list(range(0, 50))}
+def create_commands_json_files(data_dir, demo_commands, start_episode, episode_num, steps_len):
+    demo_command = demo_commands[0] # 暂时只用一个
+    
+    commands = {demo_command: list(range(start_episode, start_episode + episode_num))}
+    print(f"{commands=}")
+    
     for command, indices in commands.items():
         for idx in indices:
             episode_filename = os.path.join(data_dir, f"episode_{idx}.json")
-            episode_content = [{"command": command, "start_timestep": 0, "end_timestep": 31, "type": "instruction", }]
+            episode_content = [{"command": command, "start_timestep": 0, "end_timestep": steps_len-1, "type": "instruction", }]
 
             with open(episode_filename, "w") as file:
                 json.dump(episode_content, file)
-    print(f"Files have been created in {data_dir}")
-
-
+    print(f"Command JSON Files have been created")
+    if FLAGS.encode_command == "distilbert":
+        os.system(f"python3 act2/command_script/encode_instruction.py --dataset_dir {data_dir} ")
+    
 def check_and_make(dir):
     if not os.path.exists(dir):
         os.makedirs(dir)
@@ -86,11 +92,6 @@ def save_demo(demo, example_path, ex_idx):
            
         data_dict['/observations/images/wrist'].append(obs.wrist_rgb) # 480， 640， 3
         
-        # wrist_depth = np.clip(obs.wrist_depth*255, 0, 255).astype(np.uint8)
-        
-        # depth_min = np.min(wrist_depth0) # 不关注爪子和地板
-        # depth_max = np.max(wrist_depth0)
-        # print(depth_min, depth_max)
         wrist_depth0 = obs.wrist_depth*255.0*5
         wrist_depth = cv2.applyColorMap(cv2.convertScaleAbs(wrist_depth0, alpha=1), cv2.COLORMAP_JET)
         
@@ -145,7 +146,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
     
-    headless_val = False
+    headless_val = True
     if socket.gethostname() != 'XJ':
         headless_val = False
     
@@ -188,9 +189,9 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         task_env.set_variation(my_variation_count)
         descriptions, _ = task_env.reset()
 
-        variation_path = os.path.join(
-            FLAGS.save_path, task_env.get_name(),
-            VARIATIONS_FOLDER % my_variation_count)
+        # variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % my_variation_count)
+        variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % 12)
+        
 
         check_and_make(variation_path)
         with open(os.path.join(
@@ -203,8 +204,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
                   '// Variation:', my_variation_count, '// Demo:', ex_idx)
             
             attempts = 10 # 每次episode给10次机会，但每一个demo默认又有10次机会，一共一个episode由100次机会
-            
-            print(FLAGS.tasks)
+
             task_config = SIM_TASK_CONFIGS[FLAGS.tasks[0]]
             episode_len = task_config['episode_len']
             while attempts > 0:
@@ -228,10 +228,13 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
                     abort_variation = True
                     break
                 with file_lock:
-                    save_demo(demo, variation_path, ex_idx)
+                    save_demo(demo, variation_path, ex_idx + FLAGS.episodes_per_task * my_variation_count)
                 break
             if abort_variation:
                 break
+            # write the command json file for one variation
+        create_commands_json_files(variation_path, descriptions, (my_variation_count * FLAGS.episodes_per_task), FLAGS.episodes_per_task, task_config['episode_len'])
+        
 
     results[i] = tasks_with_problems
     rlbench_env.shutdown()

@@ -277,7 +277,7 @@ def build(args): # 核心模型部分 称为类VAE模型
     # backbone = None # from state for now, no need for conv nets
     # From image
     backbones = []
-    print(f"{args.camera_names=}")
+    # print(f"{args.camera_names=}")
     for _ in args.camera_names: # 不同视角用不同的backbone
         backbone = build_backbone(args)
         backbones.append(backbone)

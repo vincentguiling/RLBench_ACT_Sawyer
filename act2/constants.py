@@ -4,60 +4,31 @@ import pathlib
 
 DATA_DIR = 'Datasets'
 SIM_TASK_CONFIGS = {
-    'reach_target_sawyer':{
-        'dataset_dir': DATA_DIR + '/reach_target_sawyer/variation0',
-        'num_episodes': 50,
-        'episode_len': 51,
-        'camera_names': ['wrist']
-    },
-    'reach_target_sawyer2':{
-        'dataset_dir': DATA_DIR + '/reach_target_sawyer2/variation0',
-        'num_episodes': 50,
-        'episode_len': 51,
-        'camera_names': ['wrist','wrist_depth']
-    },
-    'reach_target_sawyer3':{ 
-        'dataset_dir': DATA_DIR + '/reach_target_sawyer3/variation0', ## 有一次名字忘记改了
-        'num_episodes': 50,
-        'episode_len': 37,
-        'camera_names': ['wrist']
-    },
-    'reach_target_sawyer4':{ 
-        'dataset_dir': DATA_DIR + '/reach_target_sawyer4/variation0',
-        'num_episodes': 50,
-        'episode_len': 51,
-        'camera_names': ['wrist','wrist_depth']
-    },
-    'sorting_program':{ 
-        'dataset_dir': DATA_DIR + '/sorting_program/variation0',
-        'num_episodes': 50,
-        'episode_len': 31,
-        'camera_names': ['wrist','wrist_depth']
-    },
-    'sorting_program2':{ 
+    'sorting_program2':{  # 一次性完成抓取和放置任务
         'dataset_dir': DATA_DIR + '/sorting_program2/variation0',
         'num_episodes': 50,
         'episode_len': 88,
-        'camera_names': ['wrist'] # , 'wrist_depth', 'head'
+        'camera_names': ['wrist'], # , 'wrist_depth', 'head'
     },
-    'sorting_program21':{ 
-        'dataset_dir': DATA_DIR + '/sorting_program21/variation0',
+    'sorting_program21':{ # 抓取
+        # 'dataset_dir': DATA_DIR + '/sorting_program21/variation0',# 单个颜色
+        'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色个颜色
         'num_episodes': 50,
         'episode_len': 32,
-        'camera_names': ['wrist'] # , 'wrist_depth', 'head'
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
-    'sorting_program22':{ 
+    'sorting_program22':{ # 放置
         'dataset_dir': DATA_DIR + '/sorting_program22/variation0',
         'num_episodes': 50,
         'episode_len': 63,
-        'camera_names': ['wrist', 'head'] # , 'wrist_depth'
+        'camera_names': ['wrist', 'head'], # , 'wrist_depth'
     },
-    'sorting_program3':{ 
+    'sorting_program3':{ # 用imitate_episodes_sawyer3 分段权重读取
         'dataset_dir': DATA_DIR + '/sorting_program3/variation0',
         'num_episodes': 50,
         'episode_len': [32,63],
         'camera_names': [['wrist'], ['wrist', 'head']],
-        'task_steps':['sorting_program21', 'sorting_program22']
+        'task_steps':['sorting_program21', 'sorting_program22'],
     },
 }
 

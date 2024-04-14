@@ -35,12 +35,6 @@ def main(args):
     num_epochs = args['num_epochs']
     num_verification = args['num_verification']
     
-    ####################################################################################
-    commands = args["command"].split(",") if args["command"] else []
-    use_language = args["use_language"]
-    language_encoder = args["language_encoder"]
-    ####################################################################################
-    
     is_sim = True 
     if is_sim:
         from constants import SIM_TASK_CONFIGS
@@ -50,6 +44,12 @@ def main(args):
     num_episodes = task_config['num_episodes']
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
+    
+    ####################################################################################
+    commands = args["command"].split(",") if args["command"] else [] # task_config['commands'] # 
+    use_language = args["use_language"]
+    language_encoder = args["language_encoder"]
+    ####################################################################################
     
     # max_skill_len = (args["max_skill_len"] if args["max_skill_len"] is not None else episode_len)
     max_skill_len = episode_len
@@ -87,7 +87,7 @@ def main(args):
     chunk_size = args['chunk_size']
     batch_size = args['batch_size']
     ckpt_dir = args['ckpt_dir'] + f'/{task_name}/{num_episodes}demo_{episode_len}step_{chunk_size}chunk_{batch_size}batch_{backbone}'
-    print(f"train on {camera_names}")
+    # print(f"train on {camera_names}")
     config = {
         'num_epochs': num_epochs,
         'ckpt_dir': ckpt_dir,
@@ -180,7 +180,6 @@ def get_image(ts, camera_names): # 推理的时候采用到
     return curr_image
 
 def generate_command_embedding(command, t, language_encoder, tokenizer, model, instructor=None):
-    # print(f"Command at {t=}: {command}")
 
     command_embedding = encode_text(command, language_encoder, tokenizer, model)
     command_embedding = torch.tensor(command_embedding).cuda()
@@ -232,6 +231,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     if not real_robot:
         from sim_env import make_sim_env
         env = make_sim_env(task_name)
+        
         env_max_reward = 1 # env.task.max_reward
     # chunk_size = num_queries
     query_frequency = policy_config['num_queries']
@@ -240,7 +240,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
         num_queries = policy_config['num_queries']
         
     ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.0) # may increase for real-world tasks
+    max_timesteps = int(max_timesteps * 1.1) # may increase for real-world tasks
     ##########################################################################################################
     
     num_rollouts = num_verification # 验证 50 次
@@ -252,8 +252,11 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     highest_rewards = []
     for rollout_id in range(num_rollouts):
         gripper_flag = 1
-        _, ts_obs = env.reset() # 重置帧数
-
+        
+        # var_target = env.variation_count()
+        env.set_variation(1)
+        descriptions, ts_obs = env.reset() # 重置帧数
+        # print(f"the task name is {descriptions[0]}")
         ### evaluation loop
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
@@ -287,9 +290,13 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                         
                         if use_language and (t % max_skill_len == 0) :
                             # Check if an intervention is needed; if so, language correction
-                            command = "reach to the red target"  # "pick up the plate"
-                        
+
+                            command = descriptions[0] 
+                            # command =  "grasp the blue target" #"aaaaaaaaaaaaaaaaaa"# commands[0] # "reach to the red target"  # "pick up the plate" "grasp the blue target"
+                            print(f"{command=}")
                             command_embedding = generate_command_embedding(command, t, language_encoder, tokenizer, model)
+                            # print(command_embedding)
+                            
                         all_actions = policy(qpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
                         language_correction = False
@@ -367,8 +374,8 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                     target_qpos_list.append(target_qpos)
                     rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                     
-                    # if gripper_flag == 0: # 目标是松爪，开始开爪子（对于复杂的任务来说，有点简单了，还是用目标性图像来表征吧）
-                    #     break
+                    if gripper_flag == 0 and reward: # 目标是松爪，开始开爪子（对于复杂的任务来说，有点简单了，还是用目标性图像来表征吧）
+                        break
                 except ConfigurationPathError: 
                     print("ConfigurationPathError ", t) # , "path lens: ",len(path))
                     break # 跳出推理循环
@@ -450,7 +457,6 @@ def forward_pass(data, policy):
         image_data, qpos_data, action_data, is_pad = data
         command_embedding = None
         
-    # image_data, qpos_data, action_data, is_pad = data
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
     return policy(qpos_data, image_data, action_data, is_pad, command_embedding) # TODO remove None # 提供了action data 不是训练模式
 
@@ -611,5 +617,8 @@ if __name__ == '__main__':
     parser.add_argument('--command', action='store', type=str, help='comma-separated list of commands', default='', required=False)
     parser.add_argument('--use_language', action='store_true')
     parser.add_argument('--language_encoder', action='store', type=str, choices=['distilbert', 'clip'], default='distilbert', help='Type of language encoder to use: distilbert or clip', required=False)
+    
+    # variation
+    parser.add_argument('--variation', action='store', type=int, default=1, help='the variations of the task', required=False)
     
     main(vars(parser.parse_args()))
