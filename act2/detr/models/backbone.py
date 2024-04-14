@@ -30,12 +30,15 @@ from .efficientnet import (
     film_efficientnet_b5,
 )
 from .resnet import film_resnet18, film_resnet34, film_resnet50
-from util.misc import NestedTensor, is_main_process
+
+from ..util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
 
 import IPython
+
 e = IPython.embed
+
 
 class FrozenBatchNorm2d(torch.nn.Module):
     """
@@ -53,15 +56,29 @@ class FrozenBatchNorm2d(torch.nn.Module):
         self.register_buffer("running_mean", torch.zeros(n))
         self.register_buffer("running_var", torch.ones(n))
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        num_batches_tracked_key = prefix + 'num_batches_tracked'
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super(FrozenBatchNorm2d, self)._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
 
     def forward(self, x):
         # move reshapes to the beginning
@@ -77,47 +94,46 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 
 class BackboneBase(nn.Module):
-
-    def __init__(self, name, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
+    def __init__(
+        self,
+        name,
+        backbone: nn.Module,
+        train_backbone: bool,
+        num_channels: int,
+        return_interm_layers: bool,
+    ):
         super().__init__()
-        # for name, parameter in backbone.named_parameters(): # only train later layers # TODO do we want this?
-        #     if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
-        #         parameter.requires_grad_(False)
         # The IntermediateLayerGetter logic below removes the last few layers in the CNNs (e.g., average pooling and classification layer)
         # and returns a dictionary-style model. For example, for the EfficientNet, it returns an ordered dictionary where the key is '0'
         # and the value is the model portion preceding the final average pooling and classification layers.
         if "resnet" in name:
             if return_interm_layers:
-                return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
+                return_layers = {
+                    "layer1": "0",
+                    "layer2": "1",
+                    "layer3": "2",
+                    "layer4": "3",
+                }
             else:
-                return_layers = {'layer4': "0"}
+                return_layers = {"layer4": "0"}
             self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
         else:  # efficientnet
             return_layers = {"features": "0"}
             self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
-                
         self.num_channels = num_channels
 
-    def forward(self, tensor):
-        # 第一版的ACT没有做 preprocess
-        # tensor = self.preprocess(tensor)
-        xs = self.body(tensor)
-        return xs
-        # out: Dict[str, NestedTensor] = {}
-        # for name, x in xs.items():
-        #     m = tensor_list.mask
-        #     assert m is not None
-        #     mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-        #     out[name] = NestedTensor(x, mask)
-        # return out
 
 
 class Backbone(BackboneBase):
-    """ResNet backbone with frozen BatchNorm."""
-    def __init__(self, name: str,
-                 train_backbone: bool,
-                 return_interm_layers: bool,
-                 dilation: bool):
+    """Image encoder backbone."""
+
+    def __init__(
+        self,
+        name: str,
+        train_backbone: bool,
+        return_interm_layers: bool,
+        dilation: bool,
+    ):
         # Load pretrained weights.
         if name == "resnet18":
             weights = ResNet18_Weights.DEFAULT
@@ -136,7 +152,6 @@ class Backbone(BackboneBase):
             num_channels = 1536
         else:
             raise ValueError
-        
         # Initialize pretrained model.
         if "resnet" in name:
             backbone = getattr(torchvision.models, name)(
@@ -148,19 +163,18 @@ class Backbone(BackboneBase):
             backbone = getattr(torchvision.models, name)(
                 weights=weights, norm_layer=FrozenBatchNorm2d
             )  # pretrained
-            
-       
-        super().__init__(name, backbone, train_backbone, num_channels, return_interm_layers)
-        
+        super().__init__(
+            name, backbone, train_backbone, num_channels, return_interm_layers
+        )
         # Get image preprocessing function.
-        self.preprocess = (weights.transforms())  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
-        
-        # backbone = getattr(torchvision.models, name)(
-        #     replace_stride_with_dilation=[False, False, dilation],
-        #     weights=is_main_process(), norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
-        
-        # num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
-        # super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
+        self.preprocess = (
+            weights.transforms(antialias=False)
+        )  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
+
+    def forward(self, tensor):
+        # tensor = self.preprocess(tensor) # 第一版的ACT没有做 preprocess
+        xs = self.body(tensor)
+        return xs
 
 
 class Joiner(nn.Sequential):
@@ -177,6 +191,7 @@ class Joiner(nn.Sequential):
             pos.append(self[1](x).to(x.dtype))
 
         return out, pos
+
 
 class FilMedBackbone(torch.nn.Module):
     """FiLMed image encoder backbone."""
@@ -218,9 +233,8 @@ class FilMedBackbone(torch.nn.Module):
             self.backbone.avgpool = nn.Sequential()  # remove average pool layer
             self.backbone.classifier = nn.Sequential()  # remove classification layer
         # Get image preprocessing function.
-        self.preprocess = (
-            weights.transforms()
-        )  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
+        self.preprocess = (weights.transforms(antialias=False))  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
+        
         # self.preprocess = transforms.Compose([ # Use this if you don't want to resize images to 224x224.
         #     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         # ])
@@ -229,9 +243,8 @@ class FilMedBackbone(torch.nn.Module):
         # img_obs shape: (batch_size, 3, H, W)
         img_obs = img_obs.float()  # cast to float type
         img_obs = self.preprocess(img_obs)
-        out = self.backbone(
-            img_obs, language_embed
-        )  # shape (B, C_final * H_final * W_final) or (B, C_final, H_final, W_final)
+        out = self.backbone(img_obs, language_embed)  # shape (B, C_final * H_final * W_final) or (B, C_final, H_final, W_final)
+        
         # If needed, unflatten output tensor from (B, C_final * H_final * W_final) to (B, C_final, H_final, W_final)
         if len(out.shape) == 2:
             H_final = W_final = int(math.sqrt(out.shape[-1] // self.num_channels))
@@ -258,12 +271,11 @@ class FiLMedJoiner(nn.Sequential):
         pos = [self[1](out[0]).to(out[0].dtype)]
         return out, pos
 
+
 def build_backbone(args):
     position_embedding = build_position_encoding(args)
     train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks
-    # backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
-        
     if "film" in args.backbone:
         print("Using FiLMed backbone.")
         backbone = FilMedBackbone(args.backbone)
@@ -273,7 +285,5 @@ def build_backbone(args):
             args.backbone, train_backbone, return_interm_layers, args.dilation
         )
         model = Joiner(backbone, position_embedding)
-    
-    model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
     return model

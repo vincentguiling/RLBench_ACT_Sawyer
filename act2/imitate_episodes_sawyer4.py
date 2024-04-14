@@ -17,7 +17,7 @@ from visualize_episodes import save_videos
 
 from sim_env import BOX_POSE
 from pyrep.errors import ConfigurationPathError
-
+from command_script.command_utils import initialize_model_and_tokenizer, encode_text
 import IPython
 e = IPython.embed
 
@@ -34,8 +34,12 @@ def main(args):
     batch_size_val = args['batch_size']
     num_epochs = args['num_epochs']
     num_verification = args['num_verification']
-
-    print("num_verification:", num_verification)
+    
+    ####################################################################################
+    commands = args["command"].split(",") if args["command"] else []
+    use_language = args["use_language"]
+    language_encoder = args["language_encoder"]
+    ####################################################################################
     
     is_sim = True 
     if is_sim:
@@ -46,7 +50,10 @@ def main(args):
     num_episodes = task_config['num_episodes']
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
-
+    
+    # max_skill_len = (args["max_skill_len"] if args["max_skill_len"] is not None else episode_len)
+    max_skill_len = episode_len
+    
     # fixed parameters
     state_dim = 15 # 左右机械臂，一共7*2 = 14,7+1
     lr_backbone = 1e-5
@@ -94,7 +101,10 @@ def main(args):
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
-        'real_robot': not is_sim
+        'real_robot': not is_sim,
+        "use_language": use_language,
+        "language_encoder": language_encoder,
+        "max_skill_len": max_skill_len,
     }
 
     if is_eval: # 如果是验证的话
@@ -110,7 +120,8 @@ def main(args):
         exit() # eval 结束后退出程序
     
     # 如果不是evaluation
-    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
+    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, 
+                                                           max_len=max_skill_len, command_list=commands, use_language=use_language, language_encoder=language_encoder)
 
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -168,6 +179,16 @@ def get_image(ts, camera_names): # 推理的时候采用到
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
     return curr_image
 
+def generate_command_embedding(command, t, language_encoder, tokenizer, model, instructor=None):
+    # print(f"Command at {t=}: {command}")
+
+    command_embedding = encode_text(command, language_encoder, tokenizer, model)
+    command_embedding = torch.tensor(command_embedding).cuda()
+    if instructor is not None:
+        command_embedding = instructor.get_nearest_embedding(command_embedding)[0]
+    return command_embedding
+    
+    
 def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     set_seed(100)
     ckpt_dir = config['ckpt_dir']
@@ -179,7 +200,16 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     max_timesteps = config['episode_len']
     task_name = config['task_name']
     temporal_agg = config['temporal_agg']
-
+    
+    ##################################################
+    use_language = config["use_language"]
+    language_encoder = config["language_encoder"]
+    max_skill_len = config["max_skill_len"]
+    if use_language:
+        tokenizer, model = initialize_model_and_tokenizer(language_encoder)
+        assert tokenizer is not None and model is not None
+    ######################################################
+    
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
@@ -214,6 +244,9 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     ##########################################################################################################
     
     num_rollouts = num_verification # 验证 50 次
+    
+    command_list = []
+    command_embedding = None
     
     episode_returns = []
     highest_rewards = []
@@ -251,9 +284,19 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
-                        # 核心重点！！！
+                        if use_language and (t % max_skill_len == 0) :
+                            # Check if an intervention is needed; if so, language correction
+                            command = "reach to the red target"  # "pick up the plate"
+                        
+                            command_embedding = generate_command_embedding(command, t, language_encoder, tokenizer, model)
+                        all_actions = policy(qpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+                        
+                        language_correction = False
+                        if use_language:
+                            prefix = "user" if language_correction else "prediction"
+                            command_list.append(f"{prefix}: {command}")
+                        
                     if temporal_agg: # 做了一个 Action Chunking
                         all_time_actions[[t], t:t+num_queries] = all_actions
                         actions_for_curr_step = all_time_actions[:, t]
@@ -298,7 +341,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
                     gripper_state = action[7]
                     # print( f"\r {gripper_flag}", end='')
-                    print(gripper_flag,' ',gripper_state)
+                    # print(gripper_flag,' ',gripper_state)
                     # 夹爪控制###############################################################################################
                     if gripper_state < 0.9 and gripper_flag == 1 : # 要做一个消抖策略
                         print("close_gripper")
@@ -400,9 +443,16 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
 
 
 def forward_pass(data, policy):
-    image_data, qpos_data, action_data, is_pad = data
+    if len(data) == 5:  # use_language
+        image_data, qpos_data, action_data, is_pad, command_embedding = data
+        command_embedding = command_embedding.cuda()
+    else:
+        image_data, qpos_data, action_data, is_pad = data
+        command_embedding = None
+        
+    # image_data, qpos_data, action_data, is_pad = data
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None # 提供了action data 不是训练模式
+    return policy(qpos_data, image_data, action_data, is_pad, command_embedding) # TODO remove None # 提供了action data 不是训练模式
 
 
 def train_bc(train_dataloader, val_dataloader, config):
@@ -556,5 +606,10 @@ if __name__ == '__main__':
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False) # 前馈层层数
     parser.add_argument('--temporal_agg', action='store_true')
     parser.add_argument('--backbone', default='resnet18', type=str, help="Name of the convolutional backbone to use")
-
+    
+    # for LLMs
+    parser.add_argument('--command', action='store', type=str, help='comma-separated list of commands', default='', required=False)
+    parser.add_argument('--use_language', action='store_true')
+    parser.add_argument('--language_encoder', action='store', type=str, choices=['distilbert', 'clip'], default='distilbert', help='Type of language encoder to use: distilbert or clip', required=False)
+    
     main(vars(parser.parse_args()))

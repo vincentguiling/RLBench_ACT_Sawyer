@@ -33,7 +33,7 @@ def get_sinusoid_encoding_table(n_position, d_hid):
 
 class DETRVAE(nn.Module):
     """ This is the DETR module that performs object detection """
-    def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names):
+    def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names, use_language=False, use_film=False, num_command=2):
         """ Initializes the model.
         Parameters:
             backbones: torch module of the backbone to be used. See backbone.py
@@ -42,17 +42,27 @@ class DETRVAE(nn.Module):
             num_queries: number of object queries, ie detection slot. This is the maximal number of objects
                          DETR can detect in a single image. For COCO, we recommend 100 queries.
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+            use_film: Whether to use FiLM language encoding.
         """
         super().__init__()
         self.num_queries = num_queries
         self.camera_names = camera_names
         self.transformer = transformer
         self.encoder = encoder
-        hidden_dim = transformer.d_model
+        self.hidden_dim = hidden_dim = transformer.d_model
         
         self.action_head = nn.Linear(hidden_dim, state_dim)
         self.is_pad_head = nn.Linear(hidden_dim, 1)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
+        
+        ###############################################################
+        self.use_language = use_language
+        self.use_film = use_film
+        if use_language:
+            self.lang_embed_proj = nn.Linear(
+                768, hidden_dim
+            )  # 512 / 768 for clip / distilbert
+        ###############################################################
         
         if backbones is not None:
             self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1) # 卷积层
@@ -72,20 +82,30 @@ class DETRVAE(nn.Module):
         self.encoder_joint_proj = nn.Linear(15, hidden_dim)  # project qpos to embedding
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
         self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
-
+        
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
-        self.additional_pos_embed = nn.Embedding(2, hidden_dim) # learned position embedding for proprio and latent
+        pos_embed_dim = 3 if self.use_language else 2 #######################################################
+        self.additional_pos_embed = nn.Embedding(pos_embed_dim, hidden_dim) # learned position embedding for proprio and latent#######################################################
 
-    def forward(self, qpos, image, env_state, actions=None, is_pad=None):
+    def forward(self, qpos, image, env_state, actions=None, is_pad=None, command_embedding=None):
         """
         qpos: batch, qpos_dim
         image: batch, num_cam, channel, height, width
         env_state: None
         actions: batch, seq, action_dim
+        command_embedding: batch, command_embedding_dim
         """
         is_training = actions is not None # train or val
         bs, _ = qpos.shape
+        
+        # Project the command embedding to the required dimension
+        if command_embedding is not None:
+            if self.use_language:
+                command_embedding_proj = self.lang_embed_proj(command_embedding)
+            else:
+                raise NotImplementedError
+        
         ### Obtain latent z from action sequence
         if is_training:
             # project action sequence to embedding dim, and concat with a CLS token
@@ -126,7 +146,14 @@ class DETRVAE(nn.Module):
             all_cam_features = []
             all_cam_pos = []
             for cam_id, cam_name in enumerate(self.camera_names):
-                features, pos = self.backbones[0](image[:, cam_id]) # HARDCODED
+            ##############################################################################
+            # features, pos = self.backbones[0](image[:, cam_id]) # HARDCODED
+                if self.use_film:
+                    features, pos = self.backbones[cam_id](image[:, cam_id], command_embedding) # add command_embedding
+                else:
+                    features, pos = self.backbones[cam_id](image[:, cam_id])
+            ##############################################################################
+            
                 features = features[0] # take the last layer feature
                 pos = pos[0]
                 all_cam_features.append(self.input_proj(features))
@@ -138,8 +165,15 @@ class DETRVAE(nn.Module):
             # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
-            hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
+            
+            ##############################################################################
             # 其中transformer的输入分别是：图像特征、图像特征位置编码、风格变量Z、joints映射后的，以及position embeddings (fixed)，权重丢进去，在训练的时候训练好的？？
+            # hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
+            # Only append the command embedding if we are using one-hot
+            command_embedding_to_append = (command_embedding_proj if self.use_language else None)
+            hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight, command_embedding=command_embedding_to_append)[0]
+            ##############################################################################
+            
         else:
             qpos = self.input_proj_robot_state(qpos)
             env_state = self.input_proj_env_state(env_state)
@@ -149,8 +183,6 @@ class DETRVAE(nn.Module):
         a_hat = self.action_head(hs)
         is_pad_hat = self.is_pad_head(hs)
         return a_hat, is_pad_hat, [mu, logvar]
-
-
 
 class CNNMLP(nn.Module):
     def __init__(self, backbones, state_dim, camera_names):
@@ -245,11 +277,16 @@ def build(args): # 核心模型部分 称为类VAE模型
     # backbone = None # from state for now, no need for conv nets
     # From image
     backbones = []
-    backbone = build_backbone(args)
-    backbones.append(backbone)
+    print(f"{args.camera_names=}")
+    for _ in args.camera_names: # 不同视角用不同的backbone
+        backbone = build_backbone(args)
+        backbones.append(backbone)
+        
+    # backbone = build_backbone(args)
+    # backbones.append(backbone)
 
     transformer = build_transformer(args)
-
+        
     encoder = build_encoder(args)
 
     model = DETRVAE(
@@ -260,6 +297,8 @@ def build(args): # 核心模型部分 称为类VAE模型
         state_dim=state_dim,
         num_queries=args.num_queries, # 每个演示的步数
         camera_names=args.camera_names, # 相机名字
+        use_language=args.use_language,
+        use_film="film" in args.backbone,
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)

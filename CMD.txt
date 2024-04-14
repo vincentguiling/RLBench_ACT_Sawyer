@@ -7,7 +7,7 @@ python3 RLBench/tools/task_builder_sawyer.py --task sorting_program22
 # 演示数据集生成    
 python3 RLBench/tools/dataset_generator_sawyer_act2.py \
     --save_path Datasets \
-    --tasks sorting_program21 \
+    --tasks sorting_program3 \
     --variations 1 \
     --episodes_per_task 50 \\
 ; \
@@ -25,7 +25,7 @@ python3 act/imitate_episodes_sawyer2.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 \
+    --num_epochs 1000  --lr 1e-5 \
     --seed 0 \
     --backbone efficientnet_b0 \
 ; \
@@ -33,7 +33,7 @@ python3 act/imitate_episodes_sawyer2.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 \
+    --num_epochs 1000  --lr 1e-5 \
     --seed 0 \
     --eval \
     --temporal_agg \

@@ -11,12 +11,12 @@ from pyrep.robots.end_effectors.robotiq85_gripper import Robotiq85Gripper
 
 
 colors = [
-    ('red', (1.0, 0.0, 0.0)),
+    ('red', (0.9, 0.1, 0.2)),
     # ('maroon', (0.5, 0.0, 0.0)),
     # ('lime', (0.0, 1.0, 0.0)),
     # ('green', (0.0, 0.5, 0.0)),
     # ('blue', (0.0, 0.0, 1.0)),
-    ('blue', (0.0, 0.0, 0.7)),
+    ('blue', (0.0, 0.75, 1.0)),
     # ('navy', (0.0, 0.0, 0.5)),
     ('yellow', (1.0, 1.0, 0.0)),
     # ('cyan', (0.0, 1.0, 1.0)),
