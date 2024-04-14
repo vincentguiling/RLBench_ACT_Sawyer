@@ -19,11 +19,12 @@ python3 RLBench/tools/dataset_generator_sawyer_act2.py \
     
 # 生成指令数据集
 python3 act2/command_script/create_command.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program21/variation0
+python3 act2/command_script/create_command.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program21/variation1 --command
 
 python3 act2/command_script/encode_instruction.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program21/variation0 
 
 # 数据集可视化
-python3 act2/visualize_episodes.py --dataset_dir Datasets/reach_target_sawyer/variation0 --episode_idx 0
+python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program21/variation1 --episode_idx 0
 
 ## train and eval
 

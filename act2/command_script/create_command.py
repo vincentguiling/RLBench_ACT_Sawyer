@@ -10,7 +10,8 @@ def create_json_files(data_dir):
     # Define the commands and the corresponding indices
     commands = {
         # "pick up the sharpie": list(range(0, 25)),
-        "reach to the red target": list(range(0, 50))
+        "reach to the red target": list(range(0, 50)),
+        # "reach to the blue target": list(range(50, 100))
     }
 
     # Iterate over each command and its indices
@@ -40,6 +41,12 @@ def create_json_files(data_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_dir', action='store', type=str, help='Dataset dir.', required=True)
+    parser.add_argument('--command', action='store', type=str, help='command of the episodes.', required=True)
+    parser.add_argument('--episode_len', action='store', type=int, default=50, help='command of the episodes.', required=True)
+    
     args = vars(parser.parse_args())
     data_directory = args['dataset_dir']# input("Enter the path for the data directory: ")
+    commands = args['episode_len']
+    print(commands)
     create_json_files(data_directory)
+    
