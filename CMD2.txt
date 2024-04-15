@@ -47,14 +47,14 @@ python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 4 --dim_feedforward 3200 \
-    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
     --use_language --language_encoder distilbert    \
     ; \
 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 4 --dim_feedforward 3200 \
-    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
     --use_language --language_encoder distilbert    \
     --eval --temporal_agg \
     ; \
@@ -121,6 +121,11 @@ python3 act/imitate_episodes_sawyer3.py \
 
 # 服务器：
 bash /home/ubuntu/data0/liangws/peract_root/CoppeliaSim/coppeliaSim.sh  
+
+# 单独，编码文本指令，需要翻墙下载模型权重
+export http_proxy="127.0.0.1:15732"       
+export https_proxy="127.0.0.1:15732"
+python3 act2/command_script/encode_instruction.py --dataset_dir Datasets/sorting_program21/variation12
 
 CUDA_VISIBLE_DEVICES=7 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
