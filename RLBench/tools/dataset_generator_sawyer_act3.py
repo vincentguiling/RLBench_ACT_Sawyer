@@ -151,7 +151,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     
     headless_val = True
     if socket.gethostname() != 'XJ':
-        headless_val = False
+        headless_val = True
     
     ##############################################################################################################
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
