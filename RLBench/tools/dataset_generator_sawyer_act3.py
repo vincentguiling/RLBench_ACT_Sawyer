@@ -193,7 +193,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         descriptions, _ = task_env.reset()
 
         # variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % my_variation_count)
-        variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % 12)
+        variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % 123)
         
 
         check_and_make(variation_path)

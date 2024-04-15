@@ -34,6 +34,7 @@ def main(args):
     batch_size_val = args['batch_size']
     num_epochs = args['num_epochs']
     num_verification = args['num_verification']
+    variation = args['variation']
     
     is_sim = True 
     if is_sim:
@@ -41,7 +42,9 @@ def main(args):
         task_config = SIM_TASK_CONFIGS[task_name]
 
     dataset_dir = task_config['dataset_dir']
-    num_episodes = task_config['num_episodes']
+    num_episodes = task_config['num_episodes'] * task_config['num_variation'] 
+    print(f"{task_config['num_episodes']=}, {task_config['num_variation']=}, {num_episodes=}, ")
+    
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
     
@@ -111,7 +114,7 @@ def main(args):
         ckpt_names = [f'policy_best_epoch{num_epochs}.pth']
         results = []
         for ckpt_name in ckpt_names:
-            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True, num_verification=num_verification) # 调用 eval_bc() 直接验证
+            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True, num_verification=num_verification,variation=variation) # 调用 eval_bc() 直接验证
             results.append([ckpt_name, success_rate, avg_return])
 
         for ckpt_name, success_rate, avg_return in results:
@@ -188,8 +191,8 @@ def generate_command_embedding(command, t, language_encoder, tokenizer, model, i
     return command_embedding
     
     
-def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
-    set_seed(100)
+def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation=0):
+    set_seed(10)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
@@ -253,10 +256,15 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
     for rollout_id in range(num_rollouts):
         gripper_flag = 1
         
-        # var_target = env.variation_count()
-        env.set_variation(1)
+        if variation >= 0:
+            env.set_variation(variation) 
+        else:
+            random_variation = np.random.randint(3)
+            env.set_variation(random_variation) 
+            
         descriptions, ts_obs = env.reset() # 重置帧数
-        # print(f"the task name is {descriptions[0]}")
+        # print(f"command is {descriptions[0]}")
+        
         ### evaluation loop
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
@@ -293,7 +301,6 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
 
                             command = descriptions[0] 
                             # command =  "grasp the blue target" #"aaaaaaaaaaaaaaaaaa"# commands[0] # "reach to the red target"  # "pick up the plate" "grasp the blue target"
-                            print(f"{command=}")
                             command_embedding = generate_command_embedding(command, t, language_encoder, tokenizer, model)
                             # print(command_embedding)
                             
@@ -423,10 +430,10 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50):
         episode_highest_reward = np.max(rewards)
         highest_rewards.append(episode_highest_reward)
         # print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
-        print(f'{rollout_id} Rollout with {t} steps : {episode_highest_reward==env_max_reward}')
+        print(f'{rollout_id} Rollout with {t} steps for [{descriptions[0]}]: {episode_highest_reward==env_max_reward}')
         if(rollout_id%5 == 0): # 限制保存数量，增快速度
             if save_episode:
-                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video_{ckpt_name0}_{rollout_id}.mp4'))
+                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video_{ckpt_name0}_{rollout_id}_{episode_highest_reward==env_max_reward}.mp4'))
 
     success_rate = np.mean(np.array(highest_rewards) == env_max_reward) # 计算占比
     avg_return = np.mean(episode_returns) # 计算平均数
@@ -619,6 +626,6 @@ if __name__ == '__main__':
     parser.add_argument('--language_encoder', action='store', type=str, choices=['distilbert', 'clip'], default='distilbert', help='Type of language encoder to use: distilbert or clip', required=False)
     
     # variation
-    parser.add_argument('--variation', action='store', type=int, default=1, help='the variations of the task', required=False)
+    parser.add_argument('--variation', action='store', type=int, default=0, help='the variations of the task', required=False)
     
     main(vars(parser.parse_args()))
