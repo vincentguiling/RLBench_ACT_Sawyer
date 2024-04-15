@@ -25,8 +25,9 @@ import time
 import h5py
 
 import cv2
-os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = '/home/boxjod/Gym/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04'  # 必须要这个才可以import cv2
-
+os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/boxjod/Gym/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04" # 必须要这个才可以import cv2
+if socket.gethostname() != 'XJ':
+    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = "/home/ubuntu/data0/liangws/peract_root/CoppeliaSim"
 FLAGS = flags.FLAGS
 
 # 使用还是 --tasks reach_target
