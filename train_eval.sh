@@ -8,7 +8,7 @@
 #     --episodes_per_task 50 \
     
 epoch_list=(1000 2000 3000)
-batch_size=(4 8 16 32)
+batch_size=(8 16 32)
 chunk_size=(10)
 backbone_list=("efficientnet_b0film")
 
