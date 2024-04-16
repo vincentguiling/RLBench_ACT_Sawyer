@@ -302,7 +302,7 @@ def build(args): # 核心模型部分 称为类VAE模型
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    # print("number of parameters: %.2fM" % (n_parameters/1e6,))
+    print("number of parameters: %.2fM" % (n_parameters/1e6,))
 
     return model
 
