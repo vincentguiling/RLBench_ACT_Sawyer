@@ -58,12 +58,24 @@ flags.DEFINE_string('encode_command', 'distilbert',
 np.set_printoptions(linewidth=200)
 
 def create_commands_json_files(data_dir, demo_commands, start_episode, episode_num, steps_len):
-    demo_command = demo_commands[0] # 暂时只用一个
+    print(f"{demo_commands=}")
     
-    commands = {demo_command: list(range(start_episode, start_episode + episode_num))}
+    if(len(demo_commands) > 4): # 如果是分段指令控制的演示任务
+        print("demo_command is complex")
+        start_step = start_episode
+        commands = {}
+        for i in range(1, 2*demo_commands[0], 2):
+            print(f"{i=}")
+            commands[demo_commands[i]] = list(range(start_step, start_step + demo_commands[i+1]))
+            start_step = start_step + demo_commands[i+1]
+            
+    else: # 如果是一般的任务
+        demo_command = demo_commands[0] # 暂时只用一个，送了两个进来，可以把任务的两个步骤，分成数组进来
+        commands = {demo_command: list(range(start_episode, start_episode + episode_num))}
+    
     print(f"{commands=}")
     
-    for command, indices in commands.items():
+    for command, indices in commands.items(): # 原始的这个是不同的文件不同的任务，不是同一个任务当中有不同的步骤
         for idx in indices:
             episode_filename = os.path.join(data_dir, f"episode_{idx}.json")
             episode_content = [{"command": command, "start_timestep": 0, "end_timestep": steps_len-1, "type": "instruction", }]
@@ -193,7 +205,13 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         descriptions, _ = task_env.reset()
 
         # variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % my_variation_count)
-        variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % 123)
+        if FLAGS.variations==1 :
+            variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % 0)
+        else:
+            varitation_index = ""
+            for i in range(1,FLAGS.variations + 1):
+                varitation_index = varitation_index + str(i)
+            variation_path = os.path.join(FLAGS.save_path, task_env.get_name(), VARIATIONS_FOLDER % int(varitation_index))
         
 
         check_and_make(variation_path)

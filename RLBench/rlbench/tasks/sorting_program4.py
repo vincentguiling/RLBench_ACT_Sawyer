@@ -11,7 +11,7 @@ from rlbench.backend.spawn_boundary import SpawnBoundary
 from rlbench.const import colors
 import numpy as np
 
-class SortingProgram22(Task):
+class SortingProgram4(Task):
 
     def init_task(self) -> None:
         # 添加目标：
@@ -23,7 +23,6 @@ class SortingProgram22(Task):
         self.boundary = Shape('boundary')
         self.distractor_block0 = Shape('distractor_block0')
         self.distractor_block1 = Shape('distractor_block1')
-        self.box_boundary = Shape('box_boundary')
         
         
         # 注册成功条件
@@ -31,10 +30,12 @@ class SortingProgram22(Task):
         success_sensor = ProximitySensor('success')
         self.success_detector0 = ProximitySensor('success0')
         self.success_detector1 = ProximitySensor('success1')
+        self.step_success = ProximitySensor('step_success')
         self.register_success_conditions([
             # DetectedCondition(self.robot.arm.get_tip(), success_sensor),
+            DetectedCondition(self.target_block, self.step_success)
             # GraspedCondition(self.robot.gripper, self.target_block),
-            DetectedCondition(self.target_block, self.success_detector0)
+            # DetectedCondition(self.target_block, self.success_detector0)
         ])
         
 
@@ -55,24 +56,16 @@ class SortingProgram22(Task):
         
         
         boundary_spawn = SpawnBoundary([self.boundary])
-        try:
-            for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0.395)) # 0.395
-        except:
-            for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0.395)) # 0.395
-        
-        box_boundary_spawn = SpawnBoundary([self.box_boundary])
-        
-        try:
-            for ob in [self.target_container0, self.target_container1]:
-                box_boundary_spawn.sample(ob, min_distance=0, min_rotation=(0, 0, 0), max_rotation=(0.395, 0, 0)) # 0.395
-        except:
-            for ob in [self.target_container0, self.target_container1]:
-                box_boundary_spawn.sample(ob, min_distance=0, min_rotation=(0, 0, 0), max_rotation=(0.395, 0, 0)) # 0.395
+        for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
+            boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0)) # 0.395
             
-        return ['put the %s target to the %s box' % (color_name, color_name),
-                'put the %s thing to the %s box' % (color_name, color_name)]  # 可以用nlp来处理
+        return ['pick up the red target',
+                # 2,'grasp the %s thing' % color_name, 32,
+                # 'lift the %s target up' % color_name, 17 # 先测试重复路径
+                # 'pick it to the %s box' % color_name,
+                # 'put it to the %s box' % color_name,
+                # 'lift up'
+                ]  # 可以用nlp来处理
     
     # 颜色变化
     def variation_count(self) -> int:

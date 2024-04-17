@@ -10,20 +10,22 @@ SIM_TASK_CONFIGS = {
         'episode_len': 88,
         'camera_names': ['wrist'], # , 'wrist_depth', 'head'
     },
-    'sorting_program21':{ # 抓取
+    'sorting_program21':{ # 抓取 用imitate_episodes_sawyer4
         # 'dataset_dir': DATA_DIR + '/sorting_program21/variation0',# 单个颜色
-        'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色个颜色
-        'dataset_dir': DATA_DIR + '/sorting_program21/variation123',# 红色和蓝色个颜色
+        'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色，2个颜色
+        'dataset_dir': DATA_DIR + '/sorting_program21/variation123',# 红色、蓝色和绿色3个颜色
         'episode_len': 32,
         'num_episodes': 50,
         'num_variation': 3,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
     'sorting_program22':{ # 放置
-        'dataset_dir': DATA_DIR + '/sorting_program22/variation0',
+        # 'dataset_dir': DATA_DIR + '/sorting_program22/variation0',
+        'dataset_dir': DATA_DIR + '/sorting_program22/variation123', # 三个颜色，开头带旋转
         'num_episodes': 50,
         'episode_len': 63,
-        'camera_names': ['wrist', 'head'], # , 'wrist_depth'
+        'num_variation': 3,
+        'camera_names': ['wrist'], # , 'wrist_depth'
     },
     'sorting_program3':{ # 用imitate_episodes_sawyer3 分段权重读取
         'dataset_dir': DATA_DIR + '/sorting_program3/variation0',
@@ -31,6 +33,13 @@ SIM_TASK_CONFIGS = {
         'episode_len': [32,63],
         'camera_names': [['wrist'], ['wrist', 'head']],
         'task_steps':['sorting_program21', 'sorting_program22'],
+    },
+    'sorting_program4':{ # 用imitate_episodes_sawyer4 不同语言指令控制不同阶段
+        'dataset_dir': DATA_DIR + '/sorting_program4/variation0',# 红色、蓝色和绿色3个颜色
+        'episode_len': 49,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],
     },
 }
 

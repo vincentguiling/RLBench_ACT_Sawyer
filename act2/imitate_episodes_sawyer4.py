@@ -192,7 +192,7 @@ def generate_command_embedding(command, t, language_encoder, tokenizer, model, i
     
     
 def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation=0):
-    set_seed(10)
+    set_seed(100)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
@@ -500,6 +500,7 @@ def train_bc(train_dataloader, val_dataloader, config):
             train_history = checkpoint['train_history']
             validation_history = checkpoint['validation_history']
             start_epoch = start_epoch + 1
+            save_1000 = 0
             break 
     
     best_ckpt_info = None # 准备返回的是数据
@@ -548,8 +549,7 @@ def train_bc(train_dataloader, val_dataloader, config):
             optimizer.zero_grad() # 重置优化器梯度参数
             
             train_history.append(detach_dict(forward_dict)) #记录训练历史
-
-
+    
     # save the policy weight for continue train
     ckpt_path = os.path.join(ckpt_dir, f'policy_epoch{epoch + 1}_seed{seed}.ckpt')
     checkpoint = {

@@ -10,7 +10,7 @@ import IPython
 e = IPython.embed
 
 CROP_TOP = True  # hardcode
-FILTER_MISTAKES = True  # Filter out mistakes from the dataset even if not use_language
+FILTER_MISTAKES = False  # Filter out mistakes from the dataset even if not use_language
 
 class EpisodicDataset(torch.utils.data.Dataset):
     def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_len=None, command_list=None, use_language=False, language_encoder=None):
@@ -133,7 +133,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # print(f"{action_len=}")
         
         padded_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32)
-        padded_action[:action_len] = action
+        # print(f"{action_len=}") #
+        padded_action[:action_len] = action # 如果这里报错，去看看command json是不是多给了一个action步骤#######################
         
         is_pad = np.zeros(max_len)
         is_pad[action_len:] = 1

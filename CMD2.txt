@@ -1,26 +1,33 @@
+# 与ROS环境分开，需要：
+export LD_LIBRARY_PATH=$COPPELIASIM_ROOT:$LD_LIBRARY_PATH
+export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
+
 # 打开CoppeliaSim
 bash /home/boxjod/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04/coppeliaSim.sh  
 
 # 创建和修改测试任务
-python3 RLBench/tools/task_builder_sawyer.py --task sorting_program21
+python3 RLBench/tools/task_builder_sawyer.py --task sorting_program22
 
 # 演示数据集生成    
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --save_path Datasets \
     --tasks sorting_program21 \
-    --variations 3 \
+    --variations 1 \
     --episodes_per_task 50 \
 ; \
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --save_path Datasets \
     --tasks sorting_program22 \
-    --variations 1 \
+    --variations 3 \
     --episodes_per_task 50 
 
 # 单独，编码文本指令，需要翻墙下载模型权重
+
 export http_proxy="127.0.0.1:7897"       
 export https_proxy="127.0.0.1:7897"
-python3 act2/command_script/encode_instruction.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program21/variation0 
+python3 act2/command_script/create_command.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program22/variation123
+
+python3 act2/command_script/encode_instruction.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program22/variation123 
 
 # 数据集可视化
 python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program21/variation1 --episode_idx 0
@@ -29,113 +36,62 @@ python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program21/vari
 ###########################################################################################################################
 # 让他兼容没有language和film的模式
 python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
+    --task_name sorting_program22 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     ; \
-    
 python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
+    --task_name sorting_program22 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     --eval --temporal_agg 
     
 ######################################################有文本编码在里面
 python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b3film \
-    --use_language --language_encoder distilbert    \
-    ; \
-python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b3film \
-    --use_language --language_encoder distilbert    \
-    --eval --temporal_agg --variation -1 \
-    ; \
-python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b5film \
-    --use_language --language_encoder distilbert    \
-    ; \
-python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b5film \
-    --use_language --language_encoder distilbert    \
-    --eval --temporal_agg --variation -1 \
-    ; \
-python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
-    --use_language --language_encoder distilbert    \
-    ; \
-python act2/imitate_episodes_sawyer4.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
-    --use_language --language_encoder distilbert    \
-    --eval --temporal_agg --variation -1 \
-    ; \
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
-######################################################以前的东西有文本编码在里面
-python3 act/imitate_episodes_sawyer2.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
-; \
-python3 act/imitate_episodes_sawyer2.py \
-    --task_name sorting_program21 \
-    --ckpt_dir Trainings \
-    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
-    --eval --temporal_agg \
-    
-; \
-python3 act2/imitate_episodes_sawyer2.py \
     --task_name sorting_program22 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 1000  --lr 1e-5 \
-    --seed 0 \
-    --backbone resnet18 \
-; \
-python3 act2/imitate_episodes_sawyer2.py \
+    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --use_language --language_encoder distilbert 
+
+python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program22 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 1000  --lr 1e-5 \
-    --seed 0 \
-    --eval \
-    --temporal_agg \
-    --backbone resnet18
+    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --use_language --language_encoder distilbert \
+    ; \
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program22 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --use_language --language_encoder distilbert \
+    --eval --temporal_agg --variation -1 
+ 
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program22 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --use_language --language_encoder distilbert \
+    ; \
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program22 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+    --use_language --language_encoder distilbert \
+    --eval --temporal_agg --variation -1 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
 
 # step by step robotic learning
 python3 act/imitate_episodes_sawyer3.py \
