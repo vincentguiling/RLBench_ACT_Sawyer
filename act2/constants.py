@@ -12,13 +12,22 @@ SIM_TASK_CONFIGS = {
     },
     'sorting_program21':{ # 抓取 用imitate_episodes_sawyer4
         # 'dataset_dir': DATA_DIR + '/sorting_program21/variation0',# 单个颜色
-        'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色，2个颜色
+        # 'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色，2个颜色
         'dataset_dir': DATA_DIR + '/sorting_program21/variation123',# 红色、蓝色和绿色3个颜色
         'episode_len': 32,
         'num_episodes': 50,
         'num_variation': 3,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
+    # 'sorting_program211':{ # 测试不同初始位置的额效果
+    #     # 'dataset_dir': DATA_DIR + '/sorting_program21/variation0',# 单个颜色
+    #     # 'dataset_dir': DATA_DIR + '/sorting_program211/variation12',# 红色和蓝色，2个颜色
+    #     'dataset_dir': DATA_DIR + '/sorting_program211/variation123',# 红色、蓝色和绿色3个颜色
+    #     'episode_len': 32,
+    #     'num_episodes': 50,
+    #     'num_variation': 3,
+    #     'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    # },
     'sorting_program22':{ # 放置
         # 'dataset_dir': DATA_DIR + '/sorting_program22/variation0',
         'dataset_dir': DATA_DIR + '/sorting_program22/variation123', # 三个颜色，开头带旋转
@@ -27,19 +36,22 @@ SIM_TASK_CONFIGS = {
         'num_variation': 3,
         'camera_names': ['wrist'], # , 'wrist_depth'
     },
-    'sorting_program3':{ # 用imitate_episodes_sawyer3 分段权重读取
+    # 'sorting_program4':{ # 用imitate_episodes_sawyer4 不同语言指令控制不同阶段
+    #     'dataset_dir': DATA_DIR + '/sorting_program4/variation0',# 红色、蓝色和绿色3个颜色
+    #     'episode_len': 49,
+    #     'num_episodes': 50,
+    #     'num_variation': 1,
+    #     'camera_names': ['wrist'],
+    # },
+    'sorting_program5':{ # 用imitate_episodes_sawyer5 分段权重读取
         'dataset_dir': DATA_DIR + '/sorting_program3/variation0',
         'num_episodes': 50,
         'episode_len': [32,63],
-        'camera_names': [['wrist'], ['wrist', 'head']],
+        'num_variation': 3,
+        'steps_backbones':['efficientnet_b5film', 'efficientnet_b3film'],
+        'task_steps':94, # 大概是两个步骤相加再多加几步
+        'camera_names': [['wrist'], ['wrist']],
         'task_steps':['sorting_program21', 'sorting_program22'],
-    },
-    'sorting_program4':{ # 用imitate_episodes_sawyer4 不同语言指令控制不同阶段
-        'dataset_dir': DATA_DIR + '/sorting_program4/variation0',# 红色、蓝色和绿色3个颜色
-        'episode_len': 49,
-        'num_episodes': 50,
-        'num_variation': 1,
-        'camera_names': ['wrist'],
     },
 }
 

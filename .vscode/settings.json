@@ -3,5 +3,6 @@
   "python.analysis.extraPaths": [
     "./act2/command_script",
     "./RLBench/tools"
-  ]
+  ],
+  "ros.distro": "noetic"
 }

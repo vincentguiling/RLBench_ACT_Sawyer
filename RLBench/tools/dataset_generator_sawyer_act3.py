@@ -256,7 +256,6 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
             # write the command json file for one variation
         create_commands_json_files(variation_path, descriptions, (my_variation_count * FLAGS.episodes_per_task), FLAGS.episodes_per_task, task_config['episode_len'])
         
-
     results[i] = tasks_with_problems
     rlbench_env.shutdown()
 

@@ -277,7 +277,7 @@ def build_backbone(args):
     train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks
     if "film" in args.backbone:
-        print("Using FiLMed backbone.")
+        # print("Using FiLMed backbone.")
         backbone = FilMedBackbone(args.backbone)
         model = FiLMedJoiner(backbone, position_embedding)
     else:
