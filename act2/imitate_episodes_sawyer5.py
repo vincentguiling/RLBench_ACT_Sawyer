@@ -116,7 +116,7 @@ def main(args):
         env = make_sim_env(task_name)
         env_max_reward = 1
         num_rollouts = num_verification
-        set_seed(10)
+        set_seed(100)
         episode_returns = []
         highest_rewards = []
         command_embedding = []
@@ -150,7 +150,6 @@ def main(args):
                 # Check if an intervention is needed; if so, language correction
                 command_embedding.append(generate_command_embedding(descriptions[0], language_encoder, tokenizer, model))
                 command_embedding.append(generate_command_embedding(descriptions[1], language_encoder, tokenizer, model))
-                
             # 调用任务步骤完成
             for task_step_index in range(len(task_steps)):
                 
@@ -320,6 +319,7 @@ def eval_bc(config, ckpt_name, env, ts_obs, qpos_history, target_qpos_list, imag
             ### query policy
             if config['policy_class'] == "ACT":
                 if t % query_frequency == 0:
+                    
                     all_actions = policy(qpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次
                     
                 if temporal_agg: # 做了一个 Action Chunking

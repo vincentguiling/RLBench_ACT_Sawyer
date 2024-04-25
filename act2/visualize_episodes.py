@@ -10,7 +10,7 @@ from constants import DT
 import IPython
 e = IPython.embed
 
-JOINT_NAMES = ["waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
+JOINT_NAMES = ["waist", "waist2", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
 STATE_NAMES = JOINT_NAMES + ["gripper"]
 
 def load_hdf5(dataset_dir, dataset_name):
@@ -21,7 +21,7 @@ def load_hdf5(dataset_dir, dataset_name):
 
     with h5py.File(dataset_path, 'r') as root:
         is_sim = root.attrs['sim']
-        qpos = root['/observations/qpos'][()]
+        qpos = root['/observations/gpos'][()]
         # qvel = root['/observations/qvel'][()]
         action = root['/action'][()]
         image_dict = dict()
@@ -35,12 +35,19 @@ def main(args):
     dataset_dir = args['dataset_dir']
     episode_idx = args['episode_idx']
     dataset_name = f'episode_{episode_idx}'
-
-    # qpos, qvel, action, image_dict = load_hdf5(dataset_dir, dataset_name)
-    qpos, action, image_dict = load_hdf5(dataset_dir, dataset_name)
-    save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
-    visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
-    # visualize_timestamp(t_list, dataset_path) # TODO addn timestamp back
+    
+    if episode_idx == 99:
+        for idx in range(50):
+            dataset_name = f'episode_{idx}'
+            qpos, action, image_dict = load_hdf5(dataset_dir, dataset_name)
+            save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
+            visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
+    else:
+        # qpos, qvel, action, image_dict = load_hdf5(dataset_dir, dataset_name)
+        qpos, action, image_dict = load_hdf5(dataset_dir, dataset_name)
+        save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
+        visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
+        # visualize_timestamp(t_list, dataset_path) # TODO addn timestamp back
 
 
 def save_videos(video, dt, video_path=None):
@@ -87,6 +94,7 @@ def visualize_joints(qpos_list, command_list, plot_path=None, ylim=None, label_o
     qpos = np.array(qpos_list) # ts, dim
     command = np.array(command_list)
     num_ts, num_dim = qpos.shape
+    print(f"{num_dim=}")
     h, w = 2, num_dim
     num_figs = num_dim
     fig, axs = plt.subplots(num_figs, 1, figsize=(w, h * num_figs))

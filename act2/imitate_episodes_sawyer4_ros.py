@@ -227,15 +227,16 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         stats = pickle.load(f)
     
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
-    
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
     if not real_robot:
         from sim_env import make_sim_env
         env = make_sim_env(task_name)
-        
         env_max_reward = 1 # env.task.max_reward
+    # else:
+        
+        
     # chunk_size = num_queries
     query_frequency = policy_config['num_queries']
     if temporal_agg:
@@ -255,6 +256,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     highest_rewards = []
     for rollout_id in range(num_rollouts):
         gripper_flag = 1
+        
         
         if variation >= 0:
             env.set_variation(variation) 

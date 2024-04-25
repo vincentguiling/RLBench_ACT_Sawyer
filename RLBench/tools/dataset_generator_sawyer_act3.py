@@ -161,7 +161,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
     
-    headless_val = True
+    headless_val = False
     if socket.gethostname() != 'XJ':
         headless_val = True
     

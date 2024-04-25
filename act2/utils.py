@@ -115,7 +115,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             # get observation at start_ts only
             gpos = root['/observations/gpos'][start_ts]
             qpos = root['/observations/qpos'][start_ts]
-            
+            gpos = gpos[:7]
             qpos = np.append(qpos,gpos)###### boxjod
             
             image_dict = dict()
@@ -175,6 +175,7 @@ def get_norm_stats(dataset_dir, num_episodes):
             qpos = root['/observations/qpos'][()]
             gpos = root['/observations/gpos'][()]
             action = root['/action'][()]
+        gpos = gpos[:7]
         qpos = np.append(qpos,gpos)
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))

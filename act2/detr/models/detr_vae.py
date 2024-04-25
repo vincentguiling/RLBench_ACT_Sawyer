@@ -98,7 +98,7 @@ class DETRVAE(nn.Module):
         """
         is_training = actions is not None # train or val
         bs, _ = qpos.shape
-        
+        # print(f"{qpos.shape=}")
         # Project the command embedding to the required dimension
         if command_embedding is not None:
             if self.use_language:
