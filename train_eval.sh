@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# test
 # 生产新的数据，里面没有nolinear
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --save_path Datasets \
