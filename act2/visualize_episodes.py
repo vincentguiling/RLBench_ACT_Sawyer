@@ -13,8 +13,7 @@ e = IPython.embed
 JOINT_NAMES = ["waist", "waist2", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
 STATE_NAMES = JOINT_NAMES + ["gripper"]
 
-def load_hdf5(dataset_dir, dataset_name):
-    dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
+def load_hdf5(dataset_path):
     if not os.path.isfile(dataset_path):
         print(f'Dataset does not exist at \n{dataset_path}\n')
         exit()
@@ -39,9 +38,12 @@ def main(args):
     if episode_idx == 99:
         for idx in range(50):
             dataset_name = f'episode_{idx}'
-            qpos, action, image_dict = load_hdf5(dataset_dir, dataset_name)
-            save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
-            visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
+            dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
+            video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4')
+            if ~os.path.exists(video_path):
+                qpos, action, image_dict = load_hdf5(dataset_path)
+                save_videos(image_dict, DT, video_path=video_path)
+                visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
     else:
         # qpos, qvel, action, image_dict = load_hdf5(dataset_dir, dataset_name)
         qpos, action, image_dict = load_hdf5(dataset_dir, dataset_name)

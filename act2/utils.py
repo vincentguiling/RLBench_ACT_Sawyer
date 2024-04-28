@@ -8,6 +8,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 import IPython
 e = IPython.embed
+import cv2 as cv
 
 CROP_TOP = True  # hardcode
 FILTER_MISTAKES = False  # Filter out mistakes from the dataset even if not use_language
@@ -141,7 +142,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
         # new axis for different cameras
         all_cam_images = []
-        for cam_name in self.camera_names:
+        for cam_name in self.camera_names: ###############################################################
+            image_dict[cam_name] = cv.resize(image_dict[cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
             all_cam_images.append(image_dict[cam_name])
         all_cam_images = np.stack(all_cam_images, axis=0)
 

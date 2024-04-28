@@ -55,9 +55,14 @@ SIM_TASK_CONFIGS = {
     },
     'sorting_program_sawyer21':{ # 抓取 用imitate_episodes_sawyer4
         'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer21',# 单个颜色
-        # 'dataset_dir': DATA_DIR + '/sorting_program21/variation12',# 红色和蓝色，2个颜色
-        # 'dataset_dir': DATA_DIR + '/sorting_program21/variation123',# 红色、蓝色和绿色3个颜色
         'episode_len': 36,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer22':{ # 抓取 用imitate_episodes_sawyer4
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer22',# 单个颜色
+        'episode_len': 77,
         'num_episodes': 50,
         'num_variation': 1,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
