@@ -33,7 +33,7 @@ class PositionEmbeddingSine(nn.Module):
         # assert mask is not None
         # not_mask = ~mask
 
-        not_mask = torch.ones_like(x[0, [0]])
+        not_mask = torch.ones_like(x[0, [0]]) # 8，1280，7，7 # 8,384
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:

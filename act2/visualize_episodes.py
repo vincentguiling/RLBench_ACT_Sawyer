@@ -45,8 +45,9 @@ def main(args):
                 save_videos(image_dict, DT, video_path=video_path)
                 visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
     else:
+        dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
         # qpos, qvel, action, image_dict = load_hdf5(dataset_dir, dataset_name)
-        qpos, action, image_dict = load_hdf5(dataset_dir, dataset_name)
+        qpos, action, image_dict = load_hdf5(dataset_path)
         save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
         visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
         # visualize_timestamp(t_list, dataset_path) # TODO addn timestamp back

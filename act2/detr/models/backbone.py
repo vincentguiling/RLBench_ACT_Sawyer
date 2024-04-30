@@ -37,8 +37,12 @@ from .position_encoding import build_position_encoding
 
 import IPython
 
-e = IPython.embed
+from .vim.models_mamba import vim_tiny_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_tiny
+from .vim.models_mamba import vim_tiny_patch16_stride8_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_tiny_ft
+from .vim.models_mamba import vim_small_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_small
+from .vim.models_mamba import vim_small_patch16_stride8_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_small_ft
 
+e = IPython.embed
 
 class FrozenBatchNorm2d(torch.nn.Module):
     """
@@ -117,12 +121,14 @@ class BackboneBase(nn.Module):
             else:
                 return_layers = {"layer4": "0"}
             self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
-        else:  # efficientnet
+        elif 'efficientnet' in name:  # efficientnet
             return_layers = {"features": "0"}
             self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+        elif 'Vim' in name:
+            # return_layers = {"norm_f": "0"}
+            self.body = backbone #IntermediateLayerGetter(backbone, return_layers=return_layers)
+            
         self.num_channels = num_channels
-
-
 
 class Backbone(BackboneBase):
     """Image encoder backbone."""
@@ -150,8 +156,22 @@ class Backbone(BackboneBase):
         elif name == "efficientnet_b3":
             weights = EfficientNet_B3_Weights.DEFAULT
             num_channels = 1536
+            
+        elif name == "Vim_tiny":
+            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_t_midclstok_76p1acc.pth'
+            num_channels = 192
+        elif name == "Vim_tiny_ft":
+            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_t_midclstok_ft_78p3acc.pth'
+            num_channels = 192
+        elif name == "Vim_small":
+            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_s_midclstok_80p5acc.pth'
+            num_channels = 384
+        elif name == "Vim_small_ft":
+            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_s_midclstok_ft_81p6acc.pth'
+            num_channels = 384
         else:
             raise ValueError
+        
         # Initialize pretrained model.
         if "resnet" in name:
             backbone = getattr(torchvision.models, name)(
@@ -159,20 +179,23 @@ class Backbone(BackboneBase):
                 weights=weights,
                 norm_layer=FrozenBatchNorm2d,
             )  # pretrained
-        else:  # efficientnet
+        elif 'efficientnet' in name:  # efficientnet
             backbone = getattr(torchvision.models, name)(
                 weights=weights, norm_layer=FrozenBatchNorm2d
             )  # pretrained
+        elif 'Vim' in name:
+            backbone = eval(name)(pretrained=True,ckpt_path=weights, drop_block_rate=None, img_size=224)
+            
         super().__init__(
             name, backbone, train_backbone, num_channels, return_interm_layers
         )
         # Get image preprocessing function.
-        self.preprocess = (
-            weights.transforms(antialias=False)
-        )  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
+        # self.preprocess = (
+        #     weights.transforms(antialias=False)
+        # )  # Use this to preprocess images the same way as the pretrained model (e.g., ResNet-18).
 
     def forward(self, tensor):
-        # tensor = self.preprocess(tensor) # 第一版的ACT没有做 preprocess
+        # tensor = self.preprocess(tensor) # 第一版的ACT没有做 preprocess,做了效果很不好
         xs = self.body(tensor)
         return xs
 
@@ -183,13 +206,14 @@ class Joiner(nn.Sequential):
 
     def forward(self, tensor_list: NestedTensor):
         xs = self[0](tensor_list)
+        
         out: List[NestedTensor] = []
         pos = []
         for name, x in xs.items():
             out.append(x)
             # position encoding
             pos.append(self[1](x).to(x.dtype))
-
+        
         return out, pos
 
 
@@ -273,17 +297,23 @@ class FiLMedJoiner(nn.Sequential):
 
 
 def build_backbone(args):
-    position_embedding = build_position_encoding(args)
     train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks
-    if "film" in args.backbone:
-        # print("Using FiLMed backbone.")
-        backbone = FilMedBackbone(args.backbone)
-        model = FiLMedJoiner(backbone, position_embedding)
-    else:
-        backbone = Backbone(
-            args.backbone, train_backbone, return_interm_layers, args.dilation
-        )
+    position_embedding = build_position_encoding(args)
+    if 'Vim' in args.backbone:
+        backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
         model = Joiner(backbone, position_embedding)
+        
+    else:
+        
+        if "film" in args.backbone:
+            # print("Using FiLMed backbone.")
+            backbone = FilMedBackbone(args.backbone)
+            model = FiLMedJoiner(backbone, position_embedding)
+        else:
+            backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
+            model = Joiner(backbone, position_embedding)
+            
+    
     model.num_channels = backbone.num_channels
     return model

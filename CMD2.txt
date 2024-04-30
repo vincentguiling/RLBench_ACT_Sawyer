@@ -95,7 +95,20 @@ python act2/imitate_episodes_sawyer4.py \
     --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     --eval --temporal_agg 
     
-    
+###########################################################################################################################
+# 任务21，没有文本编码, Vision Mamba 作为图像编码器
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone Vim_small_ft \
+    ; \
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone Vim_small_ft \
+    --eval --temporal_agg 
     
     
     

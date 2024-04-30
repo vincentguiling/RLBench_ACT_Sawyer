@@ -143,7 +143,13 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # new axis for different cameras
         all_cam_images = []
         for cam_name in self.camera_names: ###############################################################
-            image_dict[cam_name] = cv.resize(image_dict[cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
+            if 'sawyer' in self.dataset_dir:
+                image_dict[cam_name] = cv.resize(image_dict[cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
+            
+            image_dict[cam_name] = image_dict[cam_name][0:120, 20:140, :] # Slicing to crop the image
+            image_dict[cam_name] = cv.resize(image_dict[cam_name], (224, 224))
+            # print(image_dict[cam_name].shape)
+            
             all_cam_images.append(image_dict[cam_name])
         all_cam_images = np.stack(all_cam_images, axis=0)
 
