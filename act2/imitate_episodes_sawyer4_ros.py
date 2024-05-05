@@ -1,3 +1,19 @@
+#######################################
+# # 来自“”加入FiLM的单步训练和推理”，的实物训练，但没有用到文本编码
+# python /home/boxjod/RLBench_ACT_Sawyer/act2/imitate_episodes_sawyer4_ros.py \
+#     --task_name sorting_program_sawyer21 \
+#     --ckpt_dir Trainings \
+#     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+#     --num_epochs 1000  --lr 5e-6 --seed 0 --backbone efficientnet_b3  \
+
+# 实物推理用的是“verification_sawyer.py”
+# cd ~/sawyer_ws ; . intera.sh
+# source ~/.bashrc
+# conda activate xj_rlbench
+# cd ~/RLBench_ACT_Sawyer/
+# python /home/boxjod/RLBench_ACT_Sawyer/act2/verification_sawyer.py
+#######################################
+
 import torch
 import numpy as np
 import os
@@ -236,7 +252,6 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         env_max_reward = 1 # env.task.max_reward
     # else:
         
-        
     # chunk_size = num_queries
     query_frequency = policy_config['num_queries']
     if temporal_agg:
@@ -256,7 +271,6 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     highest_rewards = []
     for rollout_id in range(num_rollouts):
         gripper_flag = 1
-        
         
         if variation >= 0:
             env.set_variation(variation) 

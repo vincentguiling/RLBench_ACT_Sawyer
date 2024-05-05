@@ -290,10 +290,10 @@ def eval_bc(config, ckpt_name, env, ts_obs, qpos_history, target_qpos_list, imag
                 gripper_value = action[7]
                 
                 # 夹爪控制#############################################################################
-                if gripper_value < 0.7 and gripper_state == 1 :
+                if gripper_value < 0.9 and gripper_state == 1 :
                     print("close_gripper")
                     gripper_state = 0
-                    env._robot.gripper.actuate(0, 0.05)
+                    env._robot.gripper.actuate(0, 0.5)
                 elif gripper_value > 0.7 and gripper_state == 0 :
                     print("open_gripper")
                     gripper_state = 1

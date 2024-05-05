@@ -1,3 +1,14 @@
+#######################################
+# # 加入FiLM的多步骤组合
+# python act2/imitate_episodes_sawyer5.py \
+#     --task_name sorting_program5 \
+#     --ckpt_dir Trainings --policy_class ACT \
+#     --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+#     --num_epochs 2000 --backbone efficientnet_b3film --lr 1e-5 --seed 0  \
+#     --use_language --language_encoder distilbert \
+#     --eval --temporal_agg --variation -1 
+#######################################
+
 import torch
 import numpy as np
 import os

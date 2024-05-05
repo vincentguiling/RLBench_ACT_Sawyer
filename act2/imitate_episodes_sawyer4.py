@@ -1,3 +1,21 @@
+#######################################
+# # 加入FiLM的单步训练和推理
+# python act2/imitate_episodes_sawyer4.py \
+#     --task_name sorting_program21 \
+#     --ckpt_dir Trainings \
+#     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+#     --num_epochs 5000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+#     --use_language --language_encoder distilbert \
+#     ; \
+# python act2/imitate_episodes_sawyer4.py \
+#     --task_name sorting_program21 \
+#     --ckpt_dir Trainings \
+#     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+#     --num_epochs 5000  --lr 1e-5 --seed 0 --backbone efficientnet_b0film \
+#     --use_language --language_encoder distilbert \
+#     --eval --temporal_agg 
+#######################################
+
 import torch
 import numpy as np
 import os
@@ -162,7 +180,10 @@ def get_image(ts, camera_names): # 推理的时候采用到
     
     curr_image = rearrange(ts.wrist_rgb, 'h w c -> c h w')
     curr_images.append(curr_image)    
-    
+    # if mamba
+    # image_dict[cam_name] = image_dict[cam_name][0:120, 20:140, :] # Slicing to crop the image
+    # image_dict[cam_name] = cv.resize(image_dict[cam_name], (224, 224))
+    # print(image_dict[cam_name].shape)
     if "wrist_depth" in camera_names:
         # wrist_depth = float_array_to_rgb_image(ts.wrist_depth, scale_factor=DEPTH_SCALE)
         # wrist_depth = np.clip(np.array(wrist_depth), 0, 255).astype(np.uint8)
@@ -227,7 +248,6 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         stats = pickle.load(f)
     
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
-    
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -243,7 +263,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         num_queries = policy_config['num_queries']
         
     ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.1) # may increase for real-world tasks
+    max_timesteps = int(max_timesteps * 1.0) # may increase for real-world tasks
     ##########################################################################################################
     
     num_rollouts = num_verification # 验证 50 次
@@ -338,7 +358,13 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)  # 就是因为这个的保护和限制，所以初始化位置不能随意改变
-                target_qpos = action
+                # target_qpos = action
+                
+                gpos_diff = action[:7]
+                # gpos_diff = [elem / 10 for elem in gpos_diff]
+                target_gpos= [obs.gripper_pose + gpos_diff]
+                action = np.append(target_gpos, action[7])
+                # print(f"{action=}")
                 
                 ###################################################
                 # 将qpos作为action
@@ -380,7 +406,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     ts_obs = env._scene.get_observation()
                     reward, _ = env._task.success() # 任务是否完成状态读取
                     qpos_list.append(qpos_numpy)
-                    target_qpos_list.append(target_qpos)
+                    target_qpos_list.append(action)
                     rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                     
                     if gripper_flag == 0 and reward: # 目标是松爪，开始开爪子（对于复杂的任务来说，有点简单了，还是用目标性图像来表征吧）

@@ -23,7 +23,6 @@ class SortingProgram21(Task):
         self.boundary = Shape('boundary')
         self.distractor_block0 = Shape('distractor_block0')
         self.distractor_block1 = Shape('distractor_block1')
-        self.box_boundary = Shape('box_boundary')
         
         
         # 注册成功条件
@@ -39,39 +38,31 @@ class SortingProgram21(Task):
         
 
     def init_episode(self, index: int) -> List[str]: 
-        # # index来自variation
-        # color_name, color_rgb = colors[index] 
-        # # 产生2个在index 前面和后面的 随机数（不跟index相同）
-        # color_choices = np.random.choice(list(range(index)) 
-        # + list(range(index +1, len(colors))),size=2,replace=True)
+        # index来自cariation
+        color_name, color_rgb = colors[index] 
+        # 产生2个在index 前面和后面的 随机数（不跟index相同）
+        color_choices = np.random.choice(list(range(index)) 
+        + list(range(index +1, len(colors))),size=2,replace=True)
         
-        # for ob, i in zip([self.distractor_block0, self.distractor_block1],
-        #                  color_choices):
-        #     ob.set_color(colors[i][1])
-        # self.target_container1.set_color(colors[i][1])
+        for ob, i in zip([self.distractor_block0, self.distractor_block1],
+                         color_choices):
+            ob.set_color(colors[i][1])
+        self.target_container1.set_color(colors[i][1])
             
-        # self.target_block.set_color(color_rgb)
-        # self.target_container0.set_color(color_rgb)
+        self.target_block.set_color(color_rgb)
+        self.target_container0.set_color(color_rgb)
         
         
         boundary_spawn = SpawnBoundary([self.boundary])
         try:
             for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0)) # 0.395
+                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0.785)) # 0.395
         except:
             for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0)) # 0.395
-        
-        box_boundary_spawn = SpawnBoundary([self.box_boundary])
-        try:
-            for ob in [self.target_container0, self.target_container1]:
-                box_boundary_spawn.sample(ob, min_distance=0, min_rotation=(0, 0, 0), max_rotation=(0.395, 0, 0)) # 0.395
-        except:
-            for ob in [self.target_container0, self.target_container1]:
-                box_boundary_spawn.sample(ob, min_distance=0, min_rotation=(0, 0, 0), max_rotation=(0.395, 0, 0)) # 0.395
-        color_name = 'red'
+                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0.785)) # 0.395
+            
         return ['grasp the %s target' % color_name,
-                'grasp the %s thing' % color_name]  # 可以用nlp来处理
+                         'grasp the %s thing' % color_name]  # 可以用nlp来处理
     
     # 颜色变化
     def variation_count(self) -> int:

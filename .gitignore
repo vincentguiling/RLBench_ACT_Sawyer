@@ -10,3 +10,4 @@ act2/detr/models/vim/*
 act2/detr/models/effientNet_shape.yaml
 act2/detr/models/resnet_shape.yaml
 act2/detr/models/vim.yaml
+python_test.ipynb

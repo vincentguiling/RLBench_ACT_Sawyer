@@ -37,10 +37,10 @@ from .position_encoding import build_position_encoding
 
 import IPython
 
-from .vim.models_mamba import vim_tiny_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_tiny
-from .vim.models_mamba import vim_tiny_patch16_stride8_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_tiny_ft
-from .vim.models_mamba import vim_small_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_small
-from .vim.models_mamba import vim_small_patch16_stride8_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_small_ft
+# from .vim.models_mamba import vim_tiny_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_tiny
+# from .vim.models_mamba import vim_tiny_patch16_stride8_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_tiny_ft
+# from .vim.models_mamba import vim_small_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_small
+# from .vim.models_mamba import vim_small_patch16_stride8_224_bimambav2_final_pool_mean_abs_pos_embed_with_midclstok_div2 as Vim_small_ft
 
 e = IPython.embed
 
@@ -157,18 +157,18 @@ class Backbone(BackboneBase):
             weights = EfficientNet_B3_Weights.DEFAULT
             num_channels = 1536
             
-        elif name == "Vim_tiny":
-            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_t_midclstok_76p1acc.pth'
-            num_channels = 192
-        elif name == "Vim_tiny_ft":
-            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_t_midclstok_ft_78p3acc.pth'
-            num_channels = 192
-        elif name == "Vim_small":
-            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_s_midclstok_80p5acc.pth'
-            num_channels = 384
-        elif name == "Vim_small_ft":
-            weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_s_midclstok_ft_81p6acc.pth'
-            num_channels = 384
+        # elif name == "Vim_tiny":
+        #     weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_t_midclstok_76p1acc.pth'
+        #     num_channels = 192
+        # elif name == "Vim_tiny_ft":
+        #     weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_t_midclstok_ft_78p3acc.pth'
+        #     num_channels = 192
+        # elif name == "Vim_small":
+        #     weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_s_midclstok_80p5acc.pth'
+        #     num_channels = 384
+        # elif name == "Vim_small_ft":
+        #     weights = '/home/boxjod/RLBench/Mamba/Vim/ckpt/vim_s_midclstok_ft_81p6acc.pth'
+        #     num_channels = 384
         else:
             raise ValueError
         
@@ -183,8 +183,8 @@ class Backbone(BackboneBase):
             backbone = getattr(torchvision.models, name)(
                 weights=weights, norm_layer=FrozenBatchNorm2d
             )  # pretrained
-        elif 'Vim' in name:
-            backbone = eval(name)(pretrained=True,ckpt_path=weights, drop_block_rate=None, img_size=224)
+        # elif 'Vim' in name:
+        #     backbone = eval(name)(pretrained=True,ckpt_path=weights, drop_block_rate=None, img_size=224)
             
         super().__init__(
             name, backbone, train_backbone, num_channels, return_interm_layers
@@ -301,9 +301,9 @@ def build_backbone(args):
     return_interm_layers = args.masks
     position_embedding = build_position_encoding(args)
     if 'Vim' in args.backbone:
-        backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
-        model = Joiner(backbone, position_embedding)
-        
+        # backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
+        # model = Joiner(backbone, position_embedding)
+        x = 1
     else:
         
         if "film" in args.backbone:

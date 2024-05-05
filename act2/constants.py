@@ -43,8 +43,18 @@ SIM_TASK_CONFIGS = {
     #     'num_variation': 1,
     #     'camera_names': ['wrist'],
     # },
-    'sorting_program5':{ # 用imitate_episodes_sawyer5 分段权重读取
+    'sorting_program3':{ # 用imitate_episodes_sawyer5 分段权重读取
         'dataset_dir': DATA_DIR + '/sorting_program3/variation0',
+        'num_episodes': 50,
+        'episode_len': [32,63],
+        'num_variation': 1,
+        # 'steps_backbones':['efficientnet_b5film', 'efficientnet_b3film'],
+        'task_steps':94, # 大概是两个步骤相加再多加几步
+        'camera_names': [['wrist'], ['wrist']],
+        'task_steps':['sorting_program21', 'sorting_program22'],
+    },
+    'sorting_program5':{ # 用imitate_episodes_sawyer5 分段权重读取
+        'dataset_dir': DATA_DIR + '/sorting_program5/variation0',
         'num_episodes': 50,
         'episode_len': [32,63],
         'num_variation': 3,

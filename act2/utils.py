@@ -146,11 +146,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
             if 'sawyer' in self.dataset_dir:
                 image_dict[cam_name] = cv.resize(image_dict[cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
             
-            image_dict[cam_name] = image_dict[cam_name][0:120, 20:140, :] # Slicing to crop the image
-            image_dict[cam_name] = cv.resize(image_dict[cam_name], (224, 224))
+            # if mamba
+            # image_dict[cam_name] = image_dict[cam_name][0:120, 20:140, :] # Slicing to crop the image
+            # image_dict[cam_name] = cv.resize(image_dict[cam_name], (224, 224))
             # print(image_dict[cam_name].shape)
-            
             all_cam_images.append(image_dict[cam_name])
+            
         all_cam_images = np.stack(all_cam_images, axis=0)
 
         # Constructing the observations
@@ -266,3 +267,35 @@ def number_to_one_hot(number, size=501):
     return one_hot_array
 
     ################################################
+
+# audio2text parrot
+class HParams:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            if type(v) == dict:
+                v = HParams(**v)
+            self[k] = v
+
+    def keys(self):
+        return self.__dict__.keys()
+
+    def items(self):
+        return self.__dict__.items()
+
+    def values(self):
+        return self.__dict__.values()
+
+    def __len__(self):
+        return len(self.__dict__)
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        return setattr(self, key, value)
+
+    def __contains__(self, key):
+        return key in self.__dict__
+
+    def __repr__(self):
+        return self.__dict__.__repr__()

@@ -103,9 +103,9 @@ def save_demo(demo, example_path, ex_idx):
     
     for i, obs in enumerate(demo): 
         if i != 0: # action是下一步的姿态 # 是 gpos的运动去向(xyz的变化)
-            data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
-            # diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1]))*10 #* 100)//100 # 减去上一时刻的gpos
-            # data_dict['/action'].append(np.append(diff_gpos, obs.gripper_open))
+            # data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
+            diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1])) #*10 #* 100)//100 # 减去上一时刻的gpos
+            data_dict['/action'].append(np.append(diff_gpos, obs.gripper_open))
            
         data_dict['/observations/images/wrist'].append(obs.wrist_rgb) # 480， 640， 3
         
@@ -120,8 +120,8 @@ def save_demo(demo, example_path, ex_idx):
         data_dict['/observations/qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
         data_dict['/observations/gpos'].append(obs.gripper_pose)
         
-    # diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1]))*10 # * 100)//100 # 减去上一时刻的gpos
-    data_dict['/action'].append(np.append(obs.gripper_pose,obs.gripper_open))
+    diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1]))*10 # * 100)//100 # 减去上一时刻的gpos
+    data_dict['/action'].append(np.append(diff_gpos,obs.gripper_open))
     dataset_path = os.path.join(example_path, f'episode_{ex_idx}') # save path
     check_and_make(example_path)
     

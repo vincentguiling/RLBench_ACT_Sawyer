@@ -1,3 +1,4 @@
+import argparse
 import rospy
 from sensor_msgs.msg import Image, JointState
 from cv_bridge import CvBridge
@@ -25,9 +26,32 @@ from intera_core_msgs.msg import (
     EndpointState,)
 
 ########################### 修改的参数 ########################### 
-task_name = 'sorting_program_sawyer21'
-ckpt_dir = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/50demo_36step_10chunk_8batch_efficientnet_b3'
-ckpt_name = 'policy_best_epoch4000.pth'
+# 默认red to red
+target_color = 'red'
+box_color = 'red'
+
+task_name_21 = 'sorting_program_sawyer21'
+ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/red'
+ckpt_name_21 = 'policy_best_epoch4000.pth'
+
+task_name_22 = 'sorting_program_sawyer22'
+ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/red'
+ckpt_name_22 = 'policy_best_epoch3000.pth'
+
+if box_color == 'red':
+  # reach to red tartget
+  task_name_21 = 'sorting_program_sawyer21'
+  ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/red'
+  ckpt_name_21 = 'policy_best_epoch4000.pth'
+  
+  if box_color == 'red': # red to red
+    task_name_22 = 'sorting_program_sawyer22'
+    ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/red2red'
+    ckpt_name_22 = 'policy_best_epoch3000.pth'
+
+task_name = task_name_21
+ckpt_dir = ckpt_dir_21
+ckpt_name = ckpt_name_21
 
 # 上方
 # 1，22，3
@@ -37,11 +61,6 @@ ckpt_name = 'policy_best_epoch4000.pth'
 
 # 下方
 # 77，88，99
-
-# task_name = 'sorting_program_sawyer22'
-# ckpt_dir = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/50demo_77step_10chunk_8batch_efficientnet_b0'
-# ckpt_name = 'policy_best_epoch3000.pth'
-
 
 ########################### 修改的参数 ###########################
 
@@ -139,9 +158,9 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
             done = True
           elif task_name == 'sorting_program_sawyer22':
             print("restart the task")
-            task_name = 'sorting_program_sawyer21'
-            ckpt_dir = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/50demo_36step_10chunk_8batch_efficientnet_b3'
-            ckpt_name = 'policy_best_epoch3000.pth'
+            task_name = task_name_21
+            ckpt_dir = ckpt_dir_21
+            ckpt_name = ckpt_name_21
             subscriber_control(0)
           
             policy, max_timesteps = buil_model(ckpt_dir, ckpt_name)
@@ -149,9 +168,9 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
           
         elif task_name == 'sorting_program_sawyer21' and c =='2':
           print("continue to the  the step 2")
-          task_name = 'sorting_program_sawyer22'
-          ckpt_dir = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/50demo_77step_10chunk_8batch_efficientnet_b0'
-          ckpt_name = 'policy_best_epoch3000.pth'
+          task_name = task_name_22
+          ckpt_dir = ckpt_dir_22
+          ckpt_name = ckpt_name_22
           subscriber_control(0)
           
           policy, max_timesteps = buil_model(ckpt_dir, ckpt_name)
@@ -336,6 +355,15 @@ def buil_model(ckpt_dir, ckpt_name):
 
 
 def main():
+  global target_color, box_color
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--target_color", type=str, default="red",
+                      help="the target color to pick up")
+  parser.add_argument("--box_color", type=str, default="red", help="the box color which to put down the picked target block")
+  args = parser.parse_args()
+  
+  target_color = args.target_color
+  box_color = args.box_color
   
   print("Initializing node... ")
   rospy.init_node('verification_sawyer_node')
