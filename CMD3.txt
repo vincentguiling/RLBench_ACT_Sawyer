@@ -6,7 +6,7 @@ export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
 bash /home/boxjod/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04/coppeliaSim.sh  
 
 # 创建和修改测试任务
-python3 RLBench/tools/task_builder_sawyer.py --task sorting_program21
+python3 RLBench/tools/task_builder_sawyer.py --task sorting_program22
 
 # 演示数据集生成    
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
@@ -21,14 +21,8 @@ python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --variations 1 \
     --episodes_per_task 50 
 
-# 单独，编码文本指令，需要翻墙下载模型权重
-export http_proxy="127.0.0.1:7897"       
-export https_proxy="127.0.0.1:7897"
-python3 act2/command_script/create_command.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program22/variation123
-python3 act2/command_script/encode_instruction.py --dataset_dir /home/boxjod/RLBench_ACT_Sawyer/Datasets/sorting_program22/variation123 
-
 # 数据集可视化
-python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program21/variation0 --episode_idx 99
+python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program22/variation0 --episode_idx 99
 
 ## train and eval
 ###########################################################################################################################
@@ -43,6 +37,19 @@ python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    ; \
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    --eval --temporal_agg \
+; \
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program21 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     ; \
 python act2/imitate_episodes_sawyer4.py \
@@ -50,10 +57,31 @@ python act2/imitate_episodes_sawyer4.py \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
-    --eval --temporal_agg 
-    
+    --eval --temporal_agg \
+; \
+
+
 ######################################################
 # 任务22，没有文本编码 
+python3 RLBench/tools/dataset_generator_sawyer_act3.py \
+    --save_path Datasets \
+    --tasks sorting_program22 \
+    --variations 1 \
+    --episodes_per_task 50 \
+    ;\
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program22 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    ; \
+python act2/imitate_episodes_sawyer4.py \
+    --task_name sorting_program22 \
+    --ckpt_dir Trainings \
+    --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 2000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    --eval --temporal_agg \
+    ;\
 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program22 \
     --ckpt_dir Trainings \
@@ -66,12 +94,8 @@ python act2/imitate_episodes_sawyer4.py \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     --eval --temporal_agg 
-
  
 # step by step robotic learning
-
-
-
 python3 act2/imitate_episodes_sawyer3.py \
     --task_name sorting_program3 \
     --ckpt_dir Trainings \
@@ -81,3 +105,7 @@ python3 act2/imitate_episodes_sawyer3.py \
     --eval \
     --temporal_agg \
     --backbone resnet18
+
+
+
+# 

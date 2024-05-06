@@ -72,6 +72,8 @@ def get_args_parser():
     # varitation
     parser.add_argument('--variation', action='store', type=int, default=1, help='the variations of the task', required=False)
     
+    parser.add_argument("--target_color", type=str, default="red",help="the target color to pick up", required=False)
+    parser.add_argument("--box_color", type=str, default="red", help="the box color which to put down the picked target  block", required=False)
     return parser
 
 

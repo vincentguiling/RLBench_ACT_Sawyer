@@ -40,7 +40,7 @@ class SortingProgram21(Task):
 
     def init_episode(self, index: int) -> List[str]: 
         # # index来自variation
-        # color_name, color_rgb = colors[index] 
+        color_name, color_rgb = colors[index] 
         # # 产生2个在index 前面和后面的 随机数（不跟index相同）
         # color_choices = np.random.choice(list(range(index)) 
         # + list(range(index +1, len(colors))),size=2,replace=True)
@@ -69,7 +69,7 @@ class SortingProgram21(Task):
         except:
             for ob in [self.target_container0, self.target_container1]:
                 box_boundary_spawn.sample(ob, min_distance=0, min_rotation=(0, 0, 0), max_rotation=(0.395, 0, 0)) # 0.395
-        color_name = 'red'
+        # color_name = 'red'
         return ['grasp the %s target' % color_name,
                 'grasp the %s thing' % color_name]  # 可以用nlp来处理
     
