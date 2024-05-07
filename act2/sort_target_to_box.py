@@ -30,37 +30,30 @@ from intera_core_msgs.msg import (
 target_color = 'red'
 box_color = 'red'
 
-task_name_21 = 'sorting_program_sawyer21'
-ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/red'
-ckpt_name_21 = 'policy_best_epoch4000.pth'
-
-task_name_22 = 'sorting_program_sawyer22'
-ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/red'
-ckpt_name_22 = 'policy_best_epoch3000.pth'
+GRIPPER_PARAM = 0.02 # 0.02是4cm方块矫正 0.03空载矫正
 
 if box_color == 'red':
   # reach to red tartget
   task_name_21 = 'sorting_program_sawyer21'
-  ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/red'
+  ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/60demo_36step_10chunk_8batch_efficientnet_b3'
   ckpt_name_21 = 'policy_best_epoch4000.pth'
   
   if box_color == 'red': # red to red
     task_name_22 = 'sorting_program_sawyer22'
     ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/red2red'
-    ckpt_name_22 = 'policy_best_epoch3000.pth'
+    ckpt_name_22 = 'policy_best_epoch1000.pth'
 
 task_name = task_name_21
 ckpt_dir = ckpt_dir_21
 ckpt_name = ckpt_name_21
 
-# 上方
-# 1，22，3
-
-# 中方
-# 44，5，6
-
-# 下方
-# 77，88，99
+# 测试，
+# 上方：1，22，3
+# 
+# 中方：托盘上移一点
+# 4，5，6
+# 下方：
+# 7，8，9
 
 ########################### 修改的参数 ###########################
 
@@ -80,9 +73,9 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
   query_frequency = 1
   num_queries = 10 # chunking_size
   if task_name == 'sorting_program_sawyer21':
-    max_timesteps = int(max_timesteps * 2.8)  # 做一个scale ##############################################################
+    max_timesteps = int(max_timesteps * 2.5)  # 做一个scale ##############################################################
   elif task_name == 'sorting_program_sawyer22':
-    max_timesteps = int(max_timesteps * 3.5)  # 做一个scale ##############################################################
+    max_timesteps = int(max_timesteps * 2.5)  # 做一个scale ##############################################################
   all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
   image_list = [] # for visualization
   
@@ -97,13 +90,13 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
   
   timestep = 0
   image_get_count = 0
-  clac_rate = 30 # hz #####################################################
+  clac_rate = 20 # hz #####################################################
   
   def go_to_next_gpos(target_gpos):
     nonlocal timestep, limb, all_time_actions, gripper_state, max_timesteps
     global task_name, ckpt_name, ckpt_dir
     
-    hover_distance = -0.15 ##########可能有点问题0.01的问题
+    hover_distance = -0.135 ##########可能有点问题0.01的问题 # 步数累计往下顶了
     tip_name = 'right_gripper_tip'
     
     approach = Pose()
@@ -256,7 +249,7 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
   def get_gripper_state(data): # gpos  # 100Hz
     nonlocal gripper_state
     gripper_state = float(data.signals[10].data[1:-1]) # 10表示的是第11个信号是 position_response_m
-    if gripper_state >= 0.03:
+    if gripper_state >= 0.02:
       gripper_state = 1
     else:
       gripper_state = 0

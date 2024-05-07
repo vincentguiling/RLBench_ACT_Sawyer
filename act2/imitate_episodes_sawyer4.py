@@ -263,7 +263,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         num_queries = policy_config['num_queries']
         
     ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.0) # may increase for real-world tasks
+    max_timesteps = int(max_timesteps * 1.2) # may increase for real-world tasks
     ##########################################################################################################
     
     num_rollouts = num_verification # 验证 50 次
@@ -358,12 +358,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)  # 就是因为这个的保护和限制，所以初始化位置不能随意改变
-                # target_qpos = action
+                target_qpos = action
                 
-                gpos_diff = action[:7]
-                # gpos_diff = [elem / 10 for elem in gpos_diff]
-                target_gpos= [obs.gripper_pose + gpos_diff]
-                action = np.append(target_gpos, action[7])
+                ###################################################
+                # 将action_diff作为action
+                # gpos_diff = action[:7]
+                # # gpos_diff = [elem / 10 for elem in gpos_diff]
+                # target_gpos= [obs.gripper_pose + gpos_diff]
+                # action = np.append(target_gpos, action[7])
                 # print(f"{action=}")
                 
                 ###################################################
@@ -381,10 +383,11 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
                     gripper_state = action[7]
                     # print( f"\r {gripper_flag}", end='')
-                    # print(gripper_flag,' ',gripper_state)
+                    print(gripper_flag,' ',gripper_state)
                     # 夹爪控制###############################################################################################
                     # if gripper_state < 1.0 and gripper_flag == 1 : # 适合步骤2 放置
-                    if gripper_state < 0.9 and gripper_flag == 1 : # 适合步骤1 夹取
+                    
+                    if gripper_state < 0.98 and gripper_flag == 1 : # 适合步骤1 夹取
                         print("close_gripper")
                         gripper_flag = 0
                         env._robot.gripper.actuate(0, 0.4)

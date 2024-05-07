@@ -66,7 +66,7 @@ SIM_TASK_CONFIGS = {
     'sorting_program_sawyer21':{ # 抓取 用imitate_episodes_sawyer4
         'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer21',# 单个颜色
         'episode_len': 36,
-        'num_episodes': 50,
+        'num_episodes': 60,
         'num_variation': 1,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
