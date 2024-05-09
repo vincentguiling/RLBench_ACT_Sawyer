@@ -113,11 +113,20 @@ class EpisodicDataset(torch.utils.data.Dataset):
             #     start_ts = np.random.choice(episode_len)
             ######################################################################################################
             
-            # get observation at start_ts only
+            # get observation at start_ts only ###这么牛？？
             gpos = root['/observations/gpos'][start_ts]
+            
+            gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][0])]
+            gpos = np.append(gpos, gpos_diff[:7])
+            
             qpos = root['/observations/qpos'][start_ts]
-            gpos = gpos[:7]
-            qpos = np.append(qpos,gpos)###### boxjod
+            
+            qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
+            qpos = np.append(qpos, qpos_diff[:7])
+            
+            # gpos = gpos[:7] # 兼顾实物机器人和仿真机器人
+            # gpos =  np.append(gpos,qpos[7])
+            # qpos = np.append(qpos,gpos)###### boxjod
             
             image_dict = dict()
             for cam_name in self.camera_names:
@@ -130,16 +139,19 @@ class EpisodicDataset(torch.utils.data.Dataset):
             else:
                 action = root['/action'][max(0, start_ts - 1) : end_ts + 1] # hack, to make timesteps more aligned
                 action_len = end_ts - max(0, start_ts - 1) + 1 # hack, to make timesteps more aligned
-
+                
+            # print(f"{action.shape=}")
         # print(f"{action_len=}")
         
         padded_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32)
-        # print(f"{action_len=}") #
+        # print(f"{action_len=}") # 随机抽样的结果当中只剩余17步了之后，也会推广到32，方便后面做action chunking 的截取，也就是说最大的quary就是max_len
         padded_action[:action_len] = action # 如果这里报错，去看看command json是不是多给了一个action步骤#######################
+        
+        # print(f"{padded_action.shape=}")
         
         is_pad = np.zeros(max_len)
         is_pad[action_len:] = 1
-
+        
         # new axis for different cameras
         all_cam_images = []
         for cam_name in self.camera_names: ###############################################################
@@ -157,6 +169,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # Constructing the observations
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
+        gpos_data = torch.from_numpy(gpos).float()
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
 
@@ -167,16 +180,19 @@ class EpisodicDataset(torch.utils.data.Dataset):
         image_data = image_data / 255.0
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
+        gpos_data = (gpos_data - self.norm_stats["gpos_mean"]) / self.norm_stats["gpos_std"]
+        
         
         if self.use_language:
-            return image_data, qpos_data, action_data, is_pad, command_embedding
+            return image_data, qpos_data, gpos_data, action_data, is_pad, command_embedding
         else:
-            return image_data, qpos_data, action_data, is_pad
+            return image_data, qpos_data, gpos_data, action_data, is_pad
         # return image_data, qpos_data, action_data, is_pad
 
 
 def get_norm_stats(dataset_dir, num_episodes):
     all_qpos_data = []
+    all_gpos_data = []
     all_action_data = []
     for episode_idx in range(num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
@@ -184,12 +200,21 @@ def get_norm_stats(dataset_dir, num_episodes):
             qpos = root['/observations/qpos'][()]
             gpos = root['/observations/gpos'][()]
             action = root['/action'][()]
-        gpos = gpos[:7]
-        qpos = np.append(qpos,gpos)
+            
+        qpos_diff = [a-b for a,b in zip(qpos, qpos[0])]
+        qpos = np.append(qpos, qpos_diff[:7])
+        
+        gpos_diff = [a-b for a,b in zip(gpos, gpos[0])]
+        gpos = np.append(gpos, gpos_diff[:7])
+        # gpos = gpos[:7]
+        # qpos = np.append(qpos,gpos)
+        
         all_qpos_data.append(torch.from_numpy(qpos))
+        all_gpos_data.append(torch.from_numpy(gpos))
         all_action_data.append(torch.from_numpy(action))
         
     all_qpos_data = torch.stack(all_qpos_data)
+    all_gpos_data = torch.stack(all_gpos_data)
     all_action_data = torch.stack(all_action_data)
     all_action_data = all_action_data
 
@@ -202,12 +227,19 @@ def get_norm_stats(dataset_dir, num_episodes):
     qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
     qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
     qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
+    
+    gpos_mean = all_gpos_data.mean(dim=[0, 1], keepdim=True)
+    gpos_std = all_gpos_data.std(dim=[0, 1], keepdim=True)
+    gpos_std = torch.clip(gpos_std, 1e-2, np.inf) # clipping
 
     stats = {"action_mean": action_mean.numpy().squeeze(), 
              "action_std": action_std.numpy().squeeze(),
              "qpos_mean": qpos_mean.numpy().squeeze(), 
              "qpos_std": qpos_std.numpy().squeeze(),
-             "example_qpos": qpos
+             "gpos_mean": gpos_mean.numpy().squeeze(), 
+             "gpos_std": gpos_std.numpy().squeeze(),
+             "example_qpos": qpos,
+             "example_gpos": gpos
              } # example_qpos就像是在作弊一样，应该可以大大提高成功率
 
     return stats

@@ -46,28 +46,30 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None, command_embedding=None):
+    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input_qpos=None, proprio_input_gpos=None, additional_pos_embed=None, command_embedding=None):
         # TODO flatten only when input has H and W
         if len(src.shape) == 4: # has H and W
             # flatten NxCxHxW to HWxNxC
             bs, c, h, w = src.shape
             src = src.flatten(2).permute(2, 0, 1)
-            pos_embed = pos_embed.flatten(2).permute(2, 0, 1).repeat(1, bs, 1)
+            pos_embed = pos_embed.flatten(2).permute(2, 0, 1).repeat(1, bs, 1) # 图像的编码，有几个图像就加了几个的，不用管它
+            
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
             # mask = mask.flatten(1)
 
-            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim
+            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim 
             pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
             if command_embedding is not None:
                 addition_input = torch.stack(
-                    [latent_input, proprio_input, command_embedding], axis=0
+                    [latent_input, proprio_input_qpos, command_embedding], axis=0
                 )
             else:
-                addition_input = torch.stack([latent_input, proprio_input], axis=0)
+                addition_input = torch.stack([latent_input, proprio_input_qpos, proprio_input_gpos], axis=0) # 把所有东西都加入src了
                 
             src = torch.cat([addition_input, src], axis=0)
         else:
             assert len(src.shape) == 3
+            print("src.shape=3")
             # flatten NxHWxC to HWxNxC
             bs, hw, c = src.shape
             src = src.permute(1, 0, 2)
@@ -76,6 +78,7 @@ class Transformer(nn.Module):
 
         tgt = torch.zeros_like(query_embed)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
+        
         hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, query_pos=query_embed)
         hs = hs.transpose(1, 2)
@@ -174,6 +177,8 @@ class TransformerEncoderLayer(nn.Module):
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
         q = k = self.with_pos_embed(src, pos)
+        # print(src_key_padding_mask.shape)
+        
         src2 = self.self_attn(q, k, value=src, attn_mask=src_mask,
                               key_padding_mask=src_key_padding_mask)[0]
         src = src + self.dropout1(src2)

@@ -76,7 +76,7 @@ def main(args):
     max_skill_len = episode_len
     
     # fixed parameters
-    state_dim = 15 # 左右机械臂，一共7*2 = 14,7+1,7+1+7
+    state_dim = 15 #15 # 左右机械臂，一共7*2 = 14,7+1,7+1+7
     lr_backbone = 1e-5
     
     backbone = args['backbone']
@@ -248,6 +248,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         stats = pickle.load(f)
     
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
+    pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -290,9 +291,11 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+        gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
         qpos_list = []
-        target_qpos_list = []
+        gpos_list = []
+        target_gpos_list = []
         rewards = []
         
         with torch.inference_mode():
@@ -300,15 +303,34 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
             t = 0
             for timestep in range(max_timesteps): # 最大帧数
                 obs = ts_obs
+                if timestep == 0:
+                    qpos_initial = obs.joint_positions
+                    gpos_initial = obs.gripper_pose
+                    
                 if(rollout_id%5 == 0): # 限制保存数量，增快速度
                     # image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
                     image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                 
-                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 + 7 = 15
-                qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
+                
+                qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8
+                
+                qpos_diff = [a - b for a,b in zip(obs.joint_positions, qpos_initial)]
+                
+                qpos_numpy = np.array(np.append(qpos_numpy, qpos_diff)) # 7 + 1 + 7 = 15
+                # qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
                 qpos = pre_process_qpos(qpos_numpy)
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
+                
+                gpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 + 7 = 15
+                
+                gpos_diff = [a - b for a,b in zip(obs.joint_positions, gpos_initial)]
+                
+                gpos_numpy = np.array(np.append(gpos_numpy, gpos_diff)) # 7 + 1 + 7 = 15
+                
+                gpos = pre_process_gpos(gpos_numpy)
+                gpos = torch.from_numpy(gpos).float().cuda().unsqueeze(0)
+                gpos_history[:, t] = gpos
                 
                 curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
@@ -324,7 +346,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                             command_embedding = generate_command_embedding(command, t, language_encoder, tokenizer, model)
                             # print(command_embedding)
                             
-                        all_actions = policy(qpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+                        all_actions = policy(qpos, gpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
                         language_correction = False
                         if use_language:
@@ -351,14 +373,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                         raw_action = all_actions[:, t % query_frequency]
                         
                 elif config['policy_class'] == "CNNMLP":
-                    raw_action = policy(qpos, curr_image) 
+                    raw_action = policy(qpos, gpos, curr_image) 
                 else:
                     raise NotImplementedError
                 
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)  # 就是因为这个的保护和限制，所以初始化位置不能随意改变
-                target_qpos = action
+                # target_qpos = action
                 
                 ###################################################
                 # 将action_diff作为action
@@ -372,7 +394,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 # 将qpos作为action
                 # ts_obs, reward, terminate = env.step(target_qpos)
                 # qpos_list.append(qpos_numpy)
-                # target_qpos_list.append(target_qpos)
+                # target_gpos_list.append(target_qpos)
                 # rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                 ###################################################
                 
@@ -383,7 +405,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
                     gripper_state = action[7]
                     # print( f"\r {gripper_flag}", end='')
-                    print(gripper_flag,' ',gripper_state)
+                    # print(gripper_flag,' ',gripper_state)
                     # 夹爪控制###############################################################################################
                     # if gripper_state < 1.0 and gripper_flag == 1 : # 适合步骤2 放置
                     
@@ -409,11 +431,12 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     ts_obs = env._scene.get_observation()
                     reward, _ = env._task.success() # 任务是否完成状态读取
                     qpos_list.append(qpos_numpy)
-                    target_qpos_list.append(action)
+                    gpos_list.append(gpos_numpy)
+                    target_gpos_list.append(action)
                     rewards.append(reward) # 由仿真环境 step 产生 reward：0，1，2，3，4，4代表全部成功
                     
-                    if gripper_flag == 0 and reward: # 目标是松爪，开始开爪子（对于复杂的任务来说，有点简单了，还是用目标性图像来表征吧）
-                        break
+                    # if gripper_flag == 0 and reward: # 目标是松爪，开始开爪子（对于复杂的任务来说，有点简单了，还是用目标性图像来表征吧）
+                    #     break
                 except ConfigurationPathError: 
                     print("ConfigurationPathError ", t) # , "path lens: ",len(path))
                     break # 跳出推理循环
@@ -422,14 +445,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     # np.random.seed(0)
                     t_back = (t*8)//10
                     
-                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_qpos_list[t_back][:7]]
+                    back_gripper_pose = [elem * (1 + (np.random.randint(100) - 50)/50) for elem in target_gpos_list[t_back][:7]]
                     for i in range(t - t_back):
                         path.pop()
                         qpos_list.pop()
-                        target_qpos_list.pop()
+                        target_gpos_list.pop()
                     t = t_back
                         
-                    # back_gripper_pose = target_qpos_list[(t*9)//10][:7]
+                    # back_gripper_pose = target_gpos_list[(t*9)//10][:7]
                     next_gripper_position = back_gripper_pose[0:3] # next 
                     next_gripper_quaternion = back_gripper_pose[3:7]
                     try:
@@ -444,7 +467,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                             
                         ts_obs = env._scene.get_observation()
                         qpos_list.append(qpos_numpy)
-                        target_qpos_list.append(target_qpos)    
+                        target_gpos_list.append(target_qpos)    
                         
                     except ConfigurationPathError:
                         print("ConfigurationPathError ConfigurationPathError")
@@ -488,15 +511,15 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
 
 
 def forward_pass(data, policy):
-    if len(data) == 5:  # use_language
-        image_data, qpos_data, action_data, is_pad, command_embedding = data
+    if len(data) == 6:  # use_language
+        image_data, qpos_data, gpos_data, action_data, is_pad, command_embedding = data
         command_embedding = command_embedding.cuda()
     else:
-        image_data, qpos_data, action_data, is_pad = data
+        image_data, qpos_data, gpos_data, action_data, is_pad = data
         command_embedding = None
         
-    image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, image_data, action_data, is_pad, command_embedding) # TODO remove None # 提供了action data 不是训练模式
+    image_data, qpos_data, gpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), gpos_data.cuda(), action_data.cuda(), is_pad.cuda()
+    return policy(qpos_data, gpos_data, image_data, action_data, is_pad, command_embedding) # TODO remove None # 提供了action data 不是训练模式
 
 
 def train_bc(train_dataloader, val_dataloader, config):
@@ -595,7 +618,7 @@ def train_bc(train_dataloader, val_dataloader, config):
     torch.save(checkpoint, ckpt_path)
     
     # save best checkpoint
-    best_epoch, min_val_loss, best_state_dict = best_ckpt_info 
+    best_epoch, min_val_loss, best_state_dict = best_ckpt_info  # 如果这里报错，说明就是没有更好的了
     pth_path = os.path.join(ckpt_dir, f'policy_best_epoch{epoch + 1}.pth') # 用来推理用的ckpt
     torch.save(best_state_dict, pth_path) 
     

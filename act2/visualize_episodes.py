@@ -36,7 +36,7 @@ def main(args):
     dataset_name = f'episode_{episode_idx}'
     
     if episode_idx == 99:
-        for idx in range(50):
+        for idx in range(100):
             dataset_name = f'episode_{idx}'
             dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
             video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4')

@@ -28,15 +28,19 @@ for idx_demo in range(demo_len):
     demo_frame = data_dict['/action'].shape[0]
     # print(demo_frame)
     for idx in range(demo_frame):
-      if idx != 0:
+      # if idx != 0:
         # data_dict2['/action'].append(data_dict['/action'][idx]) # 预测 gpos # 存在一个正逆运动学变换的误差
-        data_dict2['/action'].append(data_dict['/observations/gpos'][idx]) # 预测 qpos
+      data_dict2['/action'].append(data_dict['/action'][idx]) # 预测 qpos
+      data_dict2['/action'][idx] = data_dict2['/action'][idx] - 0.135
+      
       data_dict2['/observations/images/wrist'].append(data_dict['/observations/images/wrist'][idx])
       data_dict2['/observations/qpos'].append(data_dict['/observations/qpos'][idx])
       data_dict2['/observations/gpos'].append(data_dict['/observations/gpos'][idx])
       
+      # data_dict2['/observations/gpos'][idx][2] = data_dict2['/observations/gpos'][idx][2] - 0.135 ######修改的
+      
     # data_dict2['/action'].append(np.append(data_dict['/action'][idx][:7], gripper_state))
-    data_dict2['/action'].append(data_dict['/observations/gpos'][idx])
+    # data_dict2['/action'].append(data_dict['/observations/gpos'][idx])
     
     # print(data_dict2['/action'].shape[0])
 # 3.重新写入

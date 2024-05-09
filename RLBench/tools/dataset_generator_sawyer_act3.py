@@ -118,7 +118,7 @@ def save_demo(demo, example_path, ex_idx):
         
         data_dict['/observations/images/head'].append(obs.head_rgb)
         data_dict['/observations/qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
-        data_dict['/observations/gpos'].append(obs.gripper_pose)
+        data_dict['/observations/gpos'].append(np.append(obs.gripper_pose, obs.gripper_open))
         
     # diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1]))*10 # * 100)//100 # 减去上一时刻的gpos
     data_dict['/action'].append(np.append(obs.gripper_pose,obs.gripper_open))
@@ -134,7 +134,7 @@ def save_demo(demo, example_path, ex_idx):
         image.create_dataset('wrist_depth', (max_timesteps, 120, 160, 3), dtype='uint8',chunks=(1, 120, 160, 3), ) 
         image.create_dataset('head', (max_timesteps, 120, 160, 3), dtype='uint8',chunks=(1, 120, 160, 3), ) 
         qpos = obs.create_dataset('qpos', (max_timesteps, 8))
-        gpos = obs.create_dataset('gpos', (max_timesteps, 7))
+        gpos = obs.create_dataset('gpos', (max_timesteps, 8))
         
         for name, array in data_dict.items():
             root[name][...] = array

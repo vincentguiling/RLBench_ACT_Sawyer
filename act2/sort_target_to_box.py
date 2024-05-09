@@ -11,7 +11,7 @@ from geometry_msgs.msg import (
 import cv2 as cv
 import torch # 如果pytorch安装成功即可导入
 import numpy as np
-import os
+import os,sys
 from policy import ACTPolicy
 import pickle
 from einops import rearrange
@@ -31,16 +31,18 @@ target_color = 'red'
 box_color = 'red'
 
 GRIPPER_PARAM = 0.02 # 0.02是4cm方块矫正 0.03空载矫正
+IF_AUTO = False
 
 if box_color == 'red':
   # reach to red tartget
   task_name_21 = 'sorting_program_sawyer21'
   ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/60demo_36step_10chunk_8batch_efficientnet_b3'
-  ckpt_name_21 = 'policy_best_epoch4000.pth'
+  ckpt_name_21 = 'policy_best_epoch1000.pth'
+  learning_rate = 2e-6
   
   if box_color == 'red': # red to red
     task_name_22 = 'sorting_program_sawyer22'
-    ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/red2red'
+    ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/50demo_77step_10chunk_8batch_efficientnet_b0'
     ckpt_name_22 = 'policy_best_epoch1000.pth'
 
 task_name = task_name_21
@@ -48,34 +50,36 @@ ckpt_dir = ckpt_dir_21
 ckpt_name = ckpt_name_21
 
 # 测试，
-# 上方：1，22，3
-# 
-# 中方：托盘上移一点
-# 4，5，6
-# 下方：
-# 7，8，9
+# 上方：
+# 1,22，33
+# 中方：偏上
+# 44，5，6，
+# 下方：偏右
+# 77，88，99，
 
 ########################### 修改的参数 ###########################
 
 def observation_to_action(policy, max_timesteps, ckpt_dir):
   print("start get the robot observation and do the model... ")
   bridge = CvBridge()
-  
+    
   gpos = []
   qpos = []
   gripper_state = 1
   stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
   with open(stats_path, 'rb') as f:
     stats = pickle.load(f)
+    
   pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
+  pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
   post_process = lambda a: a * stats['action_std'] + stats['action_mean']
   
   query_frequency = 1
   num_queries = 10 # chunking_size
   if task_name == 'sorting_program_sawyer21':
-    max_timesteps = int(max_timesteps * 2.5)  # 做一个scale ##############################################################
+    max_timesteps = int(max_timesteps * 2.4)  # 做一个scale ##############################################################
   elif task_name == 'sorting_program_sawyer22':
-    max_timesteps = int(max_timesteps * 2.5)  # 做一个scale ##############################################################
+    max_timesteps = int(max_timesteps * 2.0)  # 做一个scale ##############################################################
   all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
   image_list = [] # for visualization
   
@@ -88,15 +92,33 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
   gripper = intera_interface.Gripper(side + '_gripper')
   joints_name = limb.joint_names()
   
+  qpos_initial = [] 
+  gpos_initial = []
+  
+  # 更新 qpos_initial 和 gpos_initial
+  def refresh_initial_pos():
+    nonlocal qpos_initial, gpos_initial
+    qpos_dict = limb.joint_angles()
+    
+    qpos_initial = [qpos_dict['right_j0'], qpos_dict['right_j1'], qpos_dict['right_j2'], qpos_dict['right_j3'], qpos_dict['right_j4'], qpos_dict['right_j5'], qpos_dict['right_j6']]
+    
+    gpos_dict = limb.endpoint_pose()
+    position_initial = gpos_dict['position']
+    orientation_initial = gpos_dict['orientation']
+    gpos_initial = [position_initial.x, position_initial.y, position_initial.z, orientation_initial.x, orientation_initial.y, orientation_initial.z, orientation_initial.w]  
+  
+  if task_name == 'sorting_program_sawyer22':
+    refresh_initial_pos()
+  
   timestep = 0
   image_get_count = 0
-  clac_rate = 20 # hz #####################################################
+  clac_rate = 10 # hz #####################################################
   
   def go_to_next_gpos(target_gpos):
     nonlocal timestep, limb, all_time_actions, gripper_state, max_timesteps
     global task_name, ckpt_name, ckpt_dir
     
-    hover_distance = -0.135 ##########可能有点问题0.01的问题 # 步数累计往下顶了
+    # hover_distance = -0.135 ##########可能有点问题0.01的问题 # 步数累计往下顶了，在数据集里面都做了处理
     tip_name = 'right_gripper_tip'
     
     approach = Pose()
@@ -107,9 +129,9 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
     approach.orientation.y = target_gpos[4]
     approach.orientation.z = target_gpos[5]
     approach.orientation.w = target_gpos[6]
-    approach.position.z = approach.position.z + hover_distance # 数据集制作和训练的时候都有用
+    # approach.position.z = approach.position.z # + hover_distance # 数据集制作和训练的时候都有用
     timestep = timestep + 1
-    print(timestep,end=' ')
+    # print(timestep,end=' ')
 
     joint_angles = limb.ik_request(approach, tip_name) # 逆向运动学
     
@@ -117,11 +139,13 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
     done = limb.move_to_joint_positions(joint_angles, timeout = 1/clac_rate) # 运动到目标位置
     
     # 处理夹爪：
-    print(f"{target_gpos[7]=}")
+    # print(f"{target_gpos[7]=}")
     
-    if gripper_state == 1 and target_gpos[7] <= 0.9:
+    if gripper_state == 1 and target_gpos[7] <= 0.6:
       print("close the gripper")
       gripper.close()
+      if task_name == 'sorting_program_sawyer21':
+        timestep = max_timesteps
       
     elif timestep > 60 and gripper_state == 0 and target_gpos[7] >= 0.1 :
       print("open the gripper")
@@ -130,65 +154,91 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       
     if timestep >= max_timesteps:
       subscriber_control(0)
-      if task_name == 'sorting_program_sawyer21':
-        print("you can try agqin input '1' and '2' to next setp")
-      elif   task_name == 'sorting_program_sawyer22':
-        print("you can try agqin input '1'")
-        
-      done = False
-      while not done and not rospy.is_shutdown():
-        c = intera_external_devices.getch()
-        if c in ['\x1b', '\x03']:
-          done = True
-          rospy.signal_shutdown("Example finished.")
-        elif c == '1':
-          if task_name == 'sorting_program_sawyer21':
-            go_to_initial_position()
-            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
-            print("retest the step 1")
-            timestep = 0
-            subscriber_control(1)
-            done = True
-          elif task_name == 'sorting_program_sawyer22':
-            print("restart the task")
-            task_name = task_name_21
-            ckpt_dir = ckpt_dir_21
-            ckpt_name = ckpt_name_21
-            subscriber_control(0)
-          
-            policy, max_timesteps = buil_model(ckpt_dir, ckpt_name)
-            observation_to_action(policy, max_timesteps, ckpt_dir)
-          
-        elif task_name == 'sorting_program_sawyer21' and c =='2':
+      
+      if IF_AUTO:
+        if task_name == 'sorting_program_sawyer21':
           print("continue to the  the step 2")
           task_name = task_name_22
           ckpt_dir = ckpt_dir_22
           ckpt_name = ckpt_name_22
           subscriber_control(0)
-          
+
           policy, max_timesteps = buil_model(ckpt_dir, ckpt_name)
           observation_to_action(policy, max_timesteps, ckpt_dir)
           
+        elif task_name == 'sorting_program_sawyer22' :
+          print("操作完成")
+          os._exit(0)
+          
+      else:
+        if task_name == 'sorting_program_sawyer21':
+          print("you can try agqin input '1' and '2' to next setp")
+        elif   task_name == 'sorting_program_sawyer22':
+          print("you can try agqin input '1'")
+          
+        done = False
+        while not done and not rospy.is_shutdown():
+          c = intera_external_devices.getch()
+          if c in ['\x1b', '\x03']:
+            done = True
+            rospy.signal_shutdown("Example finished.")
+          elif c == '1':
+            if task_name == 'sorting_program_sawyer21':
+              go_to_initial_position()
+              all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
+              print("retest the step 1")
+              timestep = 0
+              subscriber_control(1)
+              done = True
+            elif task_name == 'sorting_program_sawyer22':
+              print("restart the task")
+              task_name = task_name_21
+              ckpt_dir = ckpt_dir_21
+              ckpt_name = ckpt_name_21
+              subscriber_control(0)
+            
+              policy, max_timesteps = buil_model(ckpt_dir, ckpt_name)
+              observation_to_action(policy, max_timesteps, ckpt_dir)
+            
+          elif task_name == 'sorting_program_sawyer21' and c =='2':
+            print("continue to the  the step 2")
+            task_name = task_name_22
+            ckpt_dir = ckpt_dir_22
+            ckpt_name = ckpt_name_22
+            subscriber_control(0)
+
+            policy, max_timesteps = buil_model(ckpt_dir, ckpt_name)
+            observation_to_action(policy, max_timesteps, ckpt_dir)
+            print("这里还是执行了")
+            if IF_AUTO:
+              print("这里还是执行了")
+              sys.exit()
       
-  def policy_model_calc(policy, qpos_current, curr_image):
+      
+  def policy_model_calc(policy, curr_image, qpos_current, gpos_current):
     with torch.inference_mode(): # 模型推理
       image_list.append({'wrist':curr_image})
 
       qpos_numpy = np.array(qpos_current) # 7 + 1 + 7 = 15
-      qpos = pre_process_qpos(qpos_numpy)
-      qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
-
+      qpos_numpy = pre_process_qpos(qpos_numpy)
+      qpos_numpy = torch.from_numpy(qpos_numpy).float().cuda().unsqueeze(0)
+      
+      gpos_numpy = np.array(gpos_current) # 7 + 1 + 7 = 15
+      gpos_numpy = pre_process_gpos(gpos_numpy)
+      gpos_numpy = torch.from_numpy(gpos_numpy).float().cuda().unsqueeze(0)
+      
+      
       ### query policy
       if timestep % query_frequency == 0:
         command_embedding = None
-        all_actions = policy(qpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+        all_actions = policy(qpos_numpy, gpos_numpy, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
 
       all_time_actions[[timestep], timestep: timestep+num_queries] = all_actions
       actions_for_curr_step = all_time_actions[:, timestep]
       
       actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
       actions_for_curr_step = actions_for_curr_step[actions_populated]
-      k = 0.25
+      k = 0.01
       exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
       exp_weights = exp_weights / exp_weights.sum() # 做了一个归一化
       exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1) # 压缩维度
@@ -201,7 +251,7 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       # print(f"{action}") 
 
   def get_observations(data): # 30Hz
-    nonlocal image_get_count, image_list, qpos, gripper_state, gpos, timestep, timestep
+    nonlocal image_get_count, image_list, qpos, gripper_state, gpos, timestep, timestep, qpos_initial, gpos_initial
     
     image_get_count = image_get_count + 1
     if (image_get_count >= 30 / clac_rate) and (timestep < max_timesteps): # 相机是30Hz的 
@@ -219,16 +269,22 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       curr_images.append(curr_image)    
       curr_image = np.stack(curr_images, axis=0)
       curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
-      qpos_current = qpos + [gripper_state] + gpos
       
-      policy_model_calc(policy, qpos_current, curr_image)
+      qpos_diff = [a-b for a,b in zip(qpos, qpos_initial)]
+      qpos_current = qpos + [gripper_state] + qpos_diff
+      
+      gpos_diff = [a-b for a,b in zip(gpos, gpos_initial)]
+      gpos_current = gpos + [gripper_state] + gpos_diff
+      
+      # print(f"{len(gpos_initial)=},{len(gpos_diff)=}")
+      policy_model_calc(policy, curr_image, qpos_current, gpos_current)
 
 
   def get_gpos(data): # gpos # 100Hz
     nonlocal gpos
     position = data.pose.position
     orientation = data.pose.orientation
-    gpos = [position.x, position.y, position.z, orientation.x, orientation.y, orientation.z, orientation.w] 
+    gpos = [position.x, position.y, position.z - 0.135, orientation.x, orientation.y, orientation.z, orientation.w] 
     
   def get_qpos(data): # gpos  # 100Hz
     nonlocal qpos, timestep
@@ -249,7 +305,7 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
   def get_gripper_state(data): # gpos  # 100Hz
     nonlocal gripper_state
     gripper_state = float(data.signals[10].data[1:-1]) # 10表示的是第11个信号是 position_response_m
-    if gripper_state >= 0.02:
+    if gripper_state >= GRIPPER_PARAM:
       gripper_state = 1
     else:
       gripper_state = 0
@@ -267,8 +323,8 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       joint_states_Subscriber.unregister()
       right_gripper_Subscriber.unregister()
       
-      
   def go_to_initial_position():
+    
     print("going to the initial position...")
     
     gripper.open()
@@ -279,6 +335,8 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
     limb.move_to_joint_positions(start_angles,timeout=6.0)
     limb.set_joint_position_speed(0.1)
     head.set_pan(0.0)
+    refresh_initial_pos()
+    
   
   def go_to_waypoint0_position():
       nonlocal all_time_actions, timestep, tray_defaul_waypoint
@@ -323,7 +381,7 @@ def buil_model(ckpt_dir, ckpt_name):
   enc_layers = 4
   dec_layers = 7
   nheads = 8 # 8头注意力机制
-  policy_config = {'lr': 1e-5,
+  policy_config = {'lr': learning_rate,
                     'num_queries': 10,
                     'kl_weight': 10,
                     'hidden_dim': 512,
@@ -348,7 +406,7 @@ def buil_model(ckpt_dir, ckpt_name):
 
 
 def main():
-  global target_color, box_color
+  global target_color, box_color, IF_AUTO
   parser = argparse.ArgumentParser()
   parser.add_argument("--target_color", type=str, default="red",
                       help="the target color to pick up")
@@ -357,6 +415,9 @@ def main():
   
   target_color = args.target_color
   box_color = args.box_color
+  
+  if target_color != None:
+    IF_AUTO = True
   
   print("Initializing node... ")
   rospy.init_node('verification_sawyer_node')
