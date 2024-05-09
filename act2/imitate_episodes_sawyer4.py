@@ -213,7 +213,7 @@ def generate_command_embedding(command, t, language_encoder, tokenizer, model, i
     
     
 def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation=0):
-    set_seed(10)
+    set_seed(20)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
@@ -224,6 +224,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     task_name = config['task_name']
     temporal_agg = config['temporal_agg']
     
+    action_dim = 8
     ##################################################
     use_language = config["use_language"]
     language_encoder = config["language_encoder"]
@@ -249,6 +250,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
+    pre_process_action_history = lambda s_action: (s_action - stats['action_mean']) / stats['action_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -288,7 +290,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         
         ### evaluation loop
         if temporal_agg: # 是否使用GPU提前读取数据？？应该可以提高 eval 速度
-            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 8]).cuda() ## 输出8维，但是输入时15维度
+            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, action_dim]).cuda() ## 输出8维，但是输入时15维度
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
@@ -298,6 +300,10 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         target_gpos_list = []
         rewards = []
         
+        
+        history_action = np.zeros((max_timesteps,) + (action_dim,), dtype=np.float32)
+        # print(f"{np.shape(history_action)=}")
+        
         with torch.inference_mode():
             path = []
             t = 0
@@ -306,16 +312,18 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 if timestep == 0:
                     qpos_initial = obs.joint_positions
                     gpos_initial = obs.gripper_pose
-                    
+                
+                is_pad_history = np.zeros(max_timesteps)
+                is_pad_history[timestep:] = 1
+                is_pad_history = torch.from_numpy(is_pad_history).bool().cuda()
+                
                 if(rollout_id%5 == 0): # 限制保存数量，增快速度
                     # image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
                     image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                 
                 
                 qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8
-                
                 qpos_diff = [a - b for a,b in zip(obs.joint_positions, qpos_initial)]
-                
                 qpos_numpy = np.array(np.append(qpos_numpy, qpos_diff)) # 7 + 1 + 7 = 15
                 # qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
                 qpos = pre_process_qpos(qpos_numpy)
@@ -323,14 +331,17 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 qpos_history[:, t] = qpos
                 
                 gpos_numpy = np.array(np.append(obs.gripper_pose, obs.gripper_open)) # 7 + 1 + 7 = 15
-                
                 gpos_diff = [a - b for a,b in zip(obs.joint_positions, gpos_initial)]
-                
                 gpos_numpy = np.array(np.append(gpos_numpy, gpos_diff)) # 7 + 1 + 7 = 15
-                
                 gpos = pre_process_gpos(gpos_numpy)
                 gpos = torch.from_numpy(gpos).float().cuda().unsqueeze(0)
                 gpos_history[:, t] = gpos
+                
+                
+                history_action_numpy = np.array(history_action)
+                history_action_numpy = pre_process_action_history(history_action_numpy)
+                history_action_numpy = torch.from_numpy(history_action_numpy).float().cuda()
+                # history_action_numpy = torch.from_numpy(history_action_numpy).float().cuda().unsqueeze(0)
                 
                 curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
@@ -340,13 +351,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                         
                         if use_language and (t % max_skill_len == 0) :
                             # Check if an intervention is needed; if so, language correction
-
                             command = descriptions[0] 
                             # command =  "grasp the blue target" #"aaaaaaaaaaaaaaaaaa"# commands[0] # "reach to the red target"  # "pick up the plate" "grasp the blue target"
                             command_embedding = generate_command_embedding(command, t, language_encoder, tokenizer, model)
                             # print(command_embedding)
-                            
-                        all_actions = policy(qpos, gpos, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
+                        
+                        all_actions = policy(qpos, gpos, curr_image, 
+                                             history_action_numpy, is_pad_history=is_pad_history, 
+                                             actions=None, is_pad_action=None, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
                         language_correction = False
                         if use_language:
@@ -382,6 +394,11 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 action = post_process(raw_action)  # 就是因为这个的保护和限制，所以初始化位置不能随意改变
                 # target_qpos = action
                 
+                # print(f"{np.shape(history_action)=}, {np.shape(action)=}")
+                
+                # history_action = np.append(history_action[1:], [action], axis=0) # 推陈出新
+                history_action = np.insert(history_action, 0, action, axis=0)[:max_timesteps]
+                
                 ###################################################
                 # 将action_diff作为action
                 # gpos_diff = action[:7]
@@ -405,11 +422,12 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
                     gripper_state = action[7]
                     # print( f"\r {gripper_flag}", end='')
-                    # print(gripper_flag,' ',gripper_state)
+                    
                     # 夹爪控制###############################################################################################
                     # if gripper_state < 1.0 and gripper_flag == 1 : # 适合步骤2 放置
                     
-                    if gripper_state < 0.98 and gripper_flag == 1 : # 适合步骤1 夹取
+                    # print(gripper_flag,' ',gripper_state)
+                    if gripper_state < 0.80 and gripper_flag == 1 : # 适合步骤1 夹取
                         print("close_gripper")
                         gripper_flag = 0
                         env._robot.gripper.actuate(0, 0.4)
@@ -511,15 +529,17 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
 
 
 def forward_pass(data, policy):
-    if len(data) == 6:  # use_language
-        image_data, qpos_data, gpos_data, action_data, is_pad, command_embedding = data
+    if len(data) == 8:  # use_language
+        image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding = data
         command_embedding = command_embedding.cuda()
-    else:
-        image_data, qpos_data, gpos_data, action_data, is_pad = data
+    else: # len = 7
+        image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action = data
         command_embedding = None
         
-    image_data, qpos_data, gpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), gpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, gpos_data, image_data, action_data, is_pad, command_embedding) # TODO remove None # 提供了action data 不是训练模式
+    image_data, qpos_data, gpos_data, = image_data.cuda(), qpos_data.cuda(), gpos_data.cuda()
+    history_action_data, is_pad_history, action_data, is_pad_action = history_action_data.cuda(), is_pad_history.cuda(), action_data.cuda(), is_pad_action.cuda()
+    
+    return policy(qpos_data, gpos_data, image_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding) # TODO remove None # 提供了action data 不是训练模式
 
 
 def train_bc(train_dataloader, val_dataloader, config):

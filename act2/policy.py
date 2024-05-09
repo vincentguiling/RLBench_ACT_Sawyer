@@ -18,27 +18,44 @@ class ACTPolicy(nn.Module):
         self.kl_weight = args_override['kl_weight']
         # print(f'KL Weight {self.kl_weight}')
 
-    def __call__(self, qpos, gpos, image, actions=None, is_pad=None, command_embedding=None):
+    def __call__(self, qpos, gpos, image, history_action=None, is_pad_history=None, actions=None, is_pad_action=None, command_embedding=None):
         env_state = None
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
         image = normalize(image)
         if actions is not None: # training time
+            history_action = history_action[:, :self.model.num_queries]
+            is_pad_history = is_pad_history[:, :self.model.num_queries]
             
-            actions = actions[:, :self.model.num_queries] # 如果输入的actions queries没有10个怎么办
-            is_pad = is_pad[:, :self.model.num_queries]
-            a_hat, is_pad_hat, (mu, logvar) = self.model(qpos, gpos, image, env_state, actions, is_pad, command_embedding=command_embedding) ############################################
-            # total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+            actions = actions[:, :self.model.num_queries] # 如果输入的actions queries没有10个怎么办[有pad补充了]
+            is_pad_action = is_pad_action[:, :self.model.num_queries]
+            
+            a_hat, is_pad_hat, (mu, logvar) = self.model(qpos, gpos, image, env_state, 
+                                                         history_action, is_pad_history=is_pad_history, 
+                                                         actions=actions, is_pad_action=is_pad_action, 
+                                                         command_embedding=command_embedding) ############################################
+            total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
             loss_dict = dict()
             all_l1 = F.l1_loss(actions, a_hat, reduction='none')
-            l1 = (all_l1 * ~is_pad.unsqueeze(-1)).mean()
+            l1 = (all_l1 * ~is_pad_action.unsqueeze(-1)).mean()
             
             loss_dict['l1'] = l1
-            # loss_dict['kl'] = total_kld[0]
-            loss_dict['loss'] = loss_dict['l1']  * self.kl_weight # + loss_dict['kl'] ################
+            loss_dict['kl'] = total_kld[0]
+            # loss_dict['loss'] = loss_dict['l1'] * self.kl_weight # + loss_dict['kl']  * self.kl_weight 
+            loss_dict['loss'] = loss_dict['l1'] + loss_dict['kl'] * self.kl_weight #   * self.kl_weight 
+            
             return loss_dict
         else: # inference time
-            a_hat, _, (_, _) = self.model(qpos, gpos, image, env_state, command_embedding=command_embedding) # no action, sample from prior  ############################################
+            
+            # print(f"{np.shape(history_action)=}")
+            is_pad_history = is_pad_history[:self.model.num_queries]
+            history_action = history_action[:self.model.num_queries]
+            # print(f"{np.shape(history_action)=}")
+            
+            a_hat, _, (_, _) = self.model(qpos, gpos, image, env_state, 
+                                          history_action, is_pad_history=is_pad_history, 
+                                          actions=None, is_pad_action=is_pad_action, 
+                                          command_embedding=command_embedding) # no action, sample from prior  ############################################
             return a_hat
 
     def configure_optimizers(self):

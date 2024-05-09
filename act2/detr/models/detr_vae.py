@@ -86,14 +86,14 @@ class DETRVAE(nn.Module):
         self.encoder_qpos_proj = nn.Linear(15, hidden_dim)  # project qpos to embedding
         self.encoder_gpos_proj = nn.Linear(15, hidden_dim)  # project gpos to embedding ###############
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
-        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+1+num_queries, hidden_dim)) # [CLS], qpos，gpos, a_seq
+        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+num_queries, hidden_dim)) # [CLS], qpos，gpos, a_seq
         
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
         pos_embed_dim = 4 if self.use_language else 3 ####################################################### 加了1，因为gpos分开了
         self.additional_pos_embed = nn.Embedding(pos_embed_dim, hidden_dim) # learned position embedding for proprio and latent#######################################################
 
-    def forward(self, qpos, gpos, image, env_state, actions=None, is_pad=None, command_embedding=None):
+    def forward(self, qpos, gpos, image, env_state, history_action=None, is_pad_history=None, actions=None, is_pad_action=None, command_embedding=None):
         """
         qpos: batch, qpos_dim
         gpos: batch, gpos_dim
@@ -103,7 +103,8 @@ class DETRVAE(nn.Module):
         command_embedding: batch, command_embedding_dim
         """
         is_training = actions is not None # train or val
-        bs, _ = qpos.shape
+        bs, _ = qpos.shape # bs = Batch_Size
+        
         # print(f"{qpos.shape=}")
         # Project the command embedding to the required dimension
         if command_embedding is not None:
@@ -113,57 +114,92 @@ class DETRVAE(nn.Module):
                 raise NotImplementedError
         
         ### Obtain latent z from action sequence
-        if is_training:
-            # project action sequence to embedding dim, and concat with a CLS token
-            action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim), (8,10) x (8, 10, 512) 
-            qpos_embed = self.encoder_qpos_proj(qpos)  # (bs, hidden_dim), (8, 512)
-            qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim), (8, 1, 512)
+        # if is_training:
+        #     # project action sequence to embedding dim, and concat with a CLS token
+        #     action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim), (8,10) x (8, 10, 512) 
+        #     qpos_embed = self.encoder_qpos_proj(qpos)  # (bs, hidden_dim), (8, 512)
+        #     qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim), (8, 1, 512)
             
-            ################
-            # gpos单独编码
-            gpos_embed = self.encoder_gpos_proj(gpos)  # (bs, hidden_dim)
-            gpos_embed = torch.unsqueeze(gpos_embed, axis=1)  # (bs, 1, hidden_dim)
-            ################
+        #     ################
+        #     # gpos单独编码
+        #     gpos_embed = self.encoder_gpos_proj(gpos)  # (bs, hidden_dim)
+        #     gpos_embed = torch.unsqueeze(gpos_embed, axis=1)  # (bs, 1, hidden_dim)
+        #     ################
             
-            cls_embed = self.cls_embed.weight # (1, hidden_dim)
-            cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
+        #     cls_embed = self.cls_embed.weight # (1, hidden_dim)
+        #     cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
             
-            encoder_input = torch.cat([cls_embed, qpos_embed, gpos_embed, action_embed], axis=1) # (bs, seq+3, hidden_dim), (8, 13, 512)
-            encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
+        #     encoder_input = torch.cat([cls_embed, qpos_embed, gpos_embed, action_embed], axis=1) # (bs, seq+3, hidden_dim), (8, 13, 512)
+        #     encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
             
-            # do not mask cls token
-            cls_joint_is_pad = torch.full((bs, 3), False).to(qpos.device) # False: not a padding, (8,2) 2->3 (8, 3)
-            is_pad = torch.cat([cls_joint_is_pad, is_pad], axis=1)  # (bs, seq+1), (8, 12) -> (8, 13)
-            # 其实transformer还是固定长度输入，只是使用了cls填充了不是固定长度的值
+        #     # do not mask cls token
+        #     cls_joint_is_pad = torch.full((bs, 3), False).to(qpos.device) # False: not a padding, (8,2) 2->3 (8, 3)
+        #     is_pad_action = torch.cat([cls_joint_is_pad, is_pad_action], axis=1)  # (bs, seq+1), (8, 12) -> (8, 13)
+        #     # 其实transformer还是固定长度输入，只是使用了cls填充了不是固定长度的值
             
-            # obtain position embedding
-            pos_embed = self.pos_table.clone().detach()
-            pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
+        #     # obtain position embedding
+        #     pos_embed = self.pos_table.clone().detach()
+        #     pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
             
-            # query model
-            encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad)
-            encoder_output = encoder_output[0] # take cls output only
+        #     # query model
+        #     encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_action)
+        #     encoder_output = encoder_output[0] # take cls output only
             
-            latent_info = self.latent_proj(encoder_output)
-            mu = latent_info[:, :self.latent_dim] # mu 是做隐层的映射，用来干什么了？
-            logvar = latent_info[:, self.latent_dim:] # logvar是隐层的另一个维度的映射提取
-            latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
-            latent_input = self.latent_out_proj(latent_sample)
+        #     latent_info = self.latent_proj(encoder_output)
+        #     mu = latent_info[:, :self.latent_dim] # mu 是做隐层的映射，用来干什么了？
+        #     logvar = latent_info[:, self.latent_dim:] # logvar是隐层的另一个维度的映射提取
+        #     latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
+        #     latent_input = self.latent_out_proj(latent_sample)
             
             
-            # # 测试一下没有风格变量Z，几乎没有影响，那我直接把历史图像全部压缩进去怎么样
-            # mu = logvar = None
-            # latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
-            # latent_input = self.latent_out_proj(latent_sample)
+        #     # # 测试一下没有风格变量Z，几乎没有影响，那我直接把历史图像全部压缩进去怎么样
+        #     mu = logvar = None
+        #     latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
+        #     latent_input = self.latent_out_proj(latent_sample)
             
-        else: # 验证的时候没用Z吗？ 对，Z=0向量
-            mu = logvar = None
-            latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
-            latent_input = self.latent_out_proj(latent_sample)
+        # else: # 验证的时候没用Z吗？ 对，Z=0向量
+        #     mu = logvar = None
+        #     latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
+        #     latent_input = self.latent_out_proj(latent_sample)
         
-        # 历史记录保存
+        ########################################
+        # 历史action用encoder编码之后输出【后面可以吧图像也加进来】
+                
+        history_action_embed = self.encoder_action_proj(history_action)# (bs, seq, hidden_dim), (8,10) x (8, 512)  = (8, 10, 512)
+        cls_embed = self.cls_embed.weight # (1, hidden_dim)
+        # print(f"{history_action_embed.shape=}")
+        # print(f"{cls_embed.shape=}")
+        
+        cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
+        # print(f"{cls_embed.shape=}, {history_action_embed.shape=}")
+        
+        if not is_training:
+            history_action_embed = torch.unsqueeze(history_action_embed, axis=0).repeat(bs, 1, 1)
+            is_pad_history = torch.unsqueeze(is_pad_history, axis=0).repeat(bs, 1)
+            is_pad_history = is_pad_history[:,]
             
-            
+        # print(f"{is_pad_history.shape=}")
+        encoder_input = torch.cat([cls_embed, history_action_embed], axis=1) # (bs, seq+3, hidden_dim), (8, 13, 512)
+        encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
+
+        cls_joint_is_pad = torch.full((bs, 1), False).to(qpos.device) # (8,1)
+        is_pad_history = torch.cat([cls_joint_is_pad, is_pad_history], axis=1)  # (bs, seq+1), (8, 10) -> (8, 11)
+        
+        pos_embed = self.pos_table.clone().detach()
+        pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
+        
+        encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_history)
+        encoder_output = encoder_output[0] # take cls output only
+        
+        latent_info = self.latent_proj(encoder_output) # 映射到 (hidden_dim, self.latent_dim*2)
+        mu = latent_info[:, :self.latent_dim] # mu取前面latent_dim
+        logvar = latent_info[:, self.latent_dim:] # logvar取后面latent_dim
+        latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
+        latent_input = self.latent_out_proj(latent_sample)
+        
+        # mu = logvar = None
+        # latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
+        # latent_input = self.latent_out_proj(latent_sample)
 
         if self.backbones is not None: # 用骨干网络做图像预处理
             # Image observation features and position embeddings

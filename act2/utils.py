@@ -106,7 +106,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 end_ts = original_action_shape[0] - 1
                 
             # episode_len = original_action_shape[0] # episode_len 不是固定了的，用end_ts代替episode_len
-            
             # if sample_full_episode:
             #     start_ts = 0
             # else:
@@ -114,15 +113,14 @@ class EpisodicDataset(torch.utils.data.Dataset):
             ######################################################################################################
             
             # get observation at start_ts only ###这么牛？？
-            gpos = root['/observations/gpos'][start_ts]
+            qpos = root['/observations/qpos'][start_ts]
+            qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
+            qpos = np.append(qpos, qpos_diff[:7])
             
+            gpos = root['/observations/gpos'][start_ts]
             gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][0])]
             gpos = np.append(gpos, gpos_diff[:7])
             
-            qpos = root['/observations/qpos'][start_ts]
-            
-            qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
-            qpos = np.append(qpos, qpos_diff[:7])
             
             # gpos = gpos[:7] # 兼顾实物机器人和仿真机器人
             # gpos =  np.append(gpos,qpos[7])
@@ -136,21 +134,26 @@ class EpisodicDataset(torch.utils.data.Dataset):
             if is_sim:
                 action = root['/action'][start_ts : end_ts + 1]
                 action_len = end_ts - start_ts + 1 # episode_len 不是固定了的
-            else:
-                action = root['/action'][max(0, start_ts - 1) : end_ts + 1] # hack, to make timesteps more aligned
-                action_len = end_ts - max(0, start_ts - 1) + 1 # hack, to make timesteps more aligned
+            # else:
+            #     action = root['/action'][max(0, start_ts - 1) : end_ts + 1] # hack, to make timesteps more aligned
+            #     action_len = end_ts - max(0, start_ts - 1) + 1 # hack, to make timesteps more aligned
                 
-            # print(f"{action.shape=}")
-        # print(f"{action_len=}")
+            history_action = root['/action'][0 : start_ts+1]
+            history_action_len = start_ts + 1
         
-        padded_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32)
-        # print(f"{action_len=}") # 随机抽样的结果当中只剩余17步了之后，也会推广到32，方便后面做action chunking 的截取，也就是说最大的quary就是max_len
+        padded_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32) # 随机抽样的结果当中只剩余17步了之后，也会推广到32，方便后面做action chunking 的截取，也就是说最大的quary就是max_len
         padded_action[:action_len] = action # 如果这里报错，去看看command json是不是多给了一个action步骤#######################
         
-        # print(f"{padded_action.shape=}")
+        padded_history_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32)
+        # padded_history_action[-history_action_len:] = history_action # 前面是空白，后面是最近的action_pos
+        padded_history_action[:history_action_len] = history_action # 往前面添加historyaction
         
-        is_pad = np.zeros(max_len)
-        is_pad[action_len:] = 1
+        is_pad_action = np.zeros(max_len)
+        is_pad_action[action_len:] = 1
+        
+        ############# 为history_action准备的is_pad
+        is_pad_history = np.zeros(max_len)
+        is_pad_history[history_action_len:] = 1 # 前面是空白，后面是最近的action_pos
         
         # new axis for different cameras
         all_cam_images = []
@@ -171,8 +174,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
         qpos_data = torch.from_numpy(qpos).float()
         gpos_data = torch.from_numpy(gpos).float()
         action_data = torch.from_numpy(padded_action).float()
-        is_pad = torch.from_numpy(is_pad).bool()
-
+        is_pad_action = torch.from_numpy(is_pad_action).bool()
+        history_action_data = torch.from_numpy(padded_history_action).float()
+        is_pad_history = torch.from_numpy(is_pad_history).bool()
+        
         # Adjusting channel
         image_data = torch.einsum('k h w c -> k c h w', image_data)
 
@@ -181,12 +186,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
         gpos_data = (gpos_data - self.norm_stats["gpos_mean"]) / self.norm_stats["gpos_std"]
-        
+        history_action_data = (history_action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         
         if self.use_language:
-            return image_data, qpos_data, gpos_data, action_data, is_pad, command_embedding
+            return image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding
         else:
-            return image_data, qpos_data, gpos_data, action_data, is_pad
+            return image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action
         # return image_data, qpos_data, action_data, is_pad
 
 
