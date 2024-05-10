@@ -277,7 +277,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     episode_returns = []
     highest_rewards = []
     for rollout_id in range(num_rollouts):
-        gripper_flag = 1
+        gripper_flag = 0
         
         if variation >= 0:
             env.set_variation(variation) 
@@ -421,24 +421,37 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     next_gripper_quaternion = action[3:7]
                     path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
                     gripper_state = action[7]
-                    # print( f"\r {gripper_flag}", end='')
                     
                     # 夹爪控制###############################################################################################
-                    # if gripper_state < 1.0 and gripper_flag == 1 : # 适合步骤2 放置
+                    done = False
+                    if task_name =="sorting_program5":
+                        if gripper_state < 0.50 and gripper_flag < 2 : # 适合步骤1 夹取
+                            print(timestep,": close_gripper: ", gripper_state)
+                            gripper_flag = gripper_flag + 1 # 留出一帧错误
+                            # while done != True:
+                            done = env._robot.gripper.actuate(0, 1.0)
+                                # env._scene.step() # Scene 步进
+
+                        elif gripper_state > 0.5 and gripper_flag == 2 :# 适合步骤1 夹取
+                            print(timestep, ": open_gripper: ", gripper_state)
+                            gripper_flag = gripper_flag + 1
+                            while done != True:
+                                done = env._robot.gripper.actuate(1, 0.4)
+                                env._scene.step() # Scene 步进
+                    else:
+                        if gripper_state < 0.80 and gripper_flag < 2 : # 适合步骤1 夹取
+                            print(timestep,": close_gripper: ", gripper_state)
+                            gripper_flag = gripper_flag + 2 # 留出一帧错误
+                            # while done != 1:
+                            done = env._robot.gripper.actuate(0, 1.0)
+                                # env._scene.step() # Scene 步进
+                        elif gripper_state > 0.7 and gripper_flag == 2 :# 适合步骤1 夹取
+                            print(timestep, ": open_gripper: ", gripper_state)
+                            gripper_flag = gripper_flag + 1
+                            while done != True:
+                                done = env._robot.gripper.actuate(1, 0.4)
+                                env._scene.step() # Scene 步进
                     
-                    # print(gripper_flag,' ',gripper_state)
-                    if gripper_state < 0.80 and gripper_flag == 1 : # 适合步骤1 夹取
-                        print("close_gripper")
-                        gripper_flag = 0
-                        env._robot.gripper.actuate(0, 0.4)
-                            
-                    # elif gripper_state > 0.6 and gripper_flag == 0 :# 适合步骤2 放置
-                    elif gripper_state > 0.5 and gripper_flag == 0 :# 适合步骤1 夹取
-                        print("open_gripper")
-                        gripper_flag = 1
-                        env._robot.gripper.actuate(1.0,0.04)
-                    
-                    # print("steps: ", t, end=' ')
                     path[t].visualize() # 在仿真环境中画出轨迹
                     
                     done = False # 当done 置为 True 的时候，说明预测的轨迹执行完毕了

@@ -28,6 +28,13 @@ SIM_TASK_CONFIGS = {
     #     'num_variation': 3,
     #     'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     # },
+    'sorting_program212':{ # 木块有旋转
+        'dataset_dir': DATA_DIR + '/sorting_program21/variation0',# 单个颜色
+        'episode_len': 32,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
     'sorting_program22':{ # 放置
         'dataset_dir': DATA_DIR + '/sorting_program22/variation0',
         # 'dataset_dir': DATA_DIR + '/sorting_program22/variation123', # 三个颜色，开头带旋转
@@ -53,15 +60,22 @@ SIM_TASK_CONFIGS = {
         'camera_names': [['wrist'], ['wrist']],
         'task_steps':['sorting_program21', 'sorting_program22'],
     },
-    'sorting_program5':{ # 用imitate_episodes_sawyer5 分段权重读取
-        'dataset_dir': DATA_DIR + '/sorting_program5/variation0',
+    # 'sorting_program5':{ # 用imitate_episodes_sawyer5 分段权重读取
+    #     'dataset_dir': DATA_DIR + '/sorting_program5/variation0',
+    #     'num_episodes': 50,
+    #     'episode_len': [32,63],
+    #     'num_variation': 3,
+    #     'steps_backbones':['efficientnet_b5film', 'efficientnet_b3film'],
+    #     'task_steps':94, # 大概是两个步骤相加再多加几步
+    #     'camera_names': [['wrist'], ['wrist']],
+    #     'task_steps':['sorting_program21', 'sorting_program22'],
+    # },
+    'sorting_program5':{ #  用imitate_episodes_sawyer4 完整任务学习
+        'dataset_dir': DATA_DIR + '/sorting_program5/variation0',# 单个颜色
+        'episode_len': 90,
         'num_episodes': 50,
-        'episode_len': [32,63],
-        'num_variation': 3,
-        'steps_backbones':['efficientnet_b5film', 'efficientnet_b3film'],
-        'task_steps':94, # 大概是两个步骤相加再多加几步
-        'camera_names': [['wrist'], ['wrist']],
-        'task_steps':['sorting_program21', 'sorting_program22'],
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
     'sorting_program_sawyer21':{ # 抓取 用imitate_episodes_sawyer4
         'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer21',# 单个颜色
