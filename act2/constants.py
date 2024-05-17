@@ -77,15 +77,57 @@ SIM_TASK_CONFIGS = {
         'num_variation': 1,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
-    'sorting_program_sawyer21':{ # 抓取 用imitate_episodes_sawyer4
+    'sorting_program_sawyer21':{ # 抓取 用imitate_episodes_sawyer4 , 1红色
         'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer21',# 单个颜色
         'episode_len': 36,
-        'num_episodes': 60,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer211':{ # 抓取 用imitate_episodes_sawyer4 ， 1红色
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer211',# 单个颜色
+        'episode_len': 36,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer212':{ # 抓取 用imitate_episodes_sawyer4 ， 2蓝色
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer212',# 单个颜色
+        'episode_len': 36,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer213':{ # 抓取 用imitate_episodes_sawyer4 ， 3绿色
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer213',# 单个颜色
+        'episode_len': 36,
+        'num_episodes': 50,
         'num_variation': 1,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
     'sorting_program_sawyer22':{ # 抓取 用imitate_episodes_sawyer4
         'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer22',# 单个颜色
+        'episode_len': 77,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer221':{ # 抓取 用imitate_episodes_sawyer4， 1红色-》红色
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer221',# 单个颜色
+        'episode_len': 77,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer222':{ # 抓取 用imitate_episodes_sawyer4， 2蓝色-》绿色
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer222',# 单个颜色
+        'episode_len': 77,
+        'num_episodes': 50,
+        'num_variation': 1,
+        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
+    },
+    'sorting_program_sawyer223':{ # 抓取 用imitate_episodes_sawyer4， 3绿色-》红色
+        'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer223',# 单个颜色
         'episode_len': 77,
         'num_episodes': 50,
         'num_variation': 1,

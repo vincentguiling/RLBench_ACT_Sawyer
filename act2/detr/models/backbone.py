@@ -206,14 +206,14 @@ class Joiner(nn.Sequential):
 
     def forward(self, tensor_list: NestedTensor):
         xs = self[0](tensor_list)
-        
+        # xs的形状大小是啥
         out: List[NestedTensor] = []
         pos = []
         for name, x in xs.items():
-            out.append(x)
+            out.append(x) 
             # position encoding
-            pos.append(self[1](x).to(x.dtype))
-        
+            pos.append(self[1](x).to(x.dtype)) # 里面根本没有用到x的值
+            
         return out, pos
 
 

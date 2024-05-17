@@ -14,20 +14,22 @@ CROP_TOP = True  # hardcode
 FILTER_MISTAKES = False  # Filter out mistakes from the dataset even if not use_language
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_len=None, command_list=None, use_language=False, language_encoder=None):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_len=None, num_queries=None, command_list=None, use_language=False, language_encoder=None):
         super(EpisodicDataset).__init__()
-        self.episode_ids = episode_ids if len(episode_ids) > 0 else [0] #################
+        self.episode_ids = episode_ids if len(episode_ids) > 0 else [0] 
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = None
-        #################
+        
         self.max_len = max_len
+        self.num_queries = num_queries if (num_queries != None) and (num_queries<max_len) else max_len
+        
         self.command_list = [cmd.strip("'\"") for cmd in command_list]
         self.use_language = use_language
         self.language_encoder = language_encoder
         self.transformations = None
-        #################
+
         self.__getitem__(0) # initialize self.is_sim
 
     def __len__(self):
@@ -41,7 +43,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
         
-        ######################################################################################################
         if self.use_language or FILTER_MISTAKES:
             
             json_name = f"episode_{episode_id}_encoded_{self.language_encoder}.json"
@@ -89,14 +90,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
                     continue
                 command_embedding = torch.tensor(segment["embedding"]).squeeze()
                 break    
-        ######################################################################################################
         
         with h5py.File(dataset_path, 'r') as root:
             is_sim = root.attrs['sim']
             self.is_sim = is_sim
             original_action_shape = root['/action'].shape
             
-            ######################################################################################################
             if len(self.command_list) > 0 or self.use_language:
                 # Sample within the segment boundaries
                 start_ts = np.random.randint(segment_start, segment_end) # 每个指令有固定的步数？
@@ -112,7 +111,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             #     start_ts = np.random.choice(episode_len)
             ######################################################################################################
             
-            # get observation at start_ts only ###这么牛？？
+            # get observation at start_ts only
             qpos = root['/observations/qpos'][start_ts]
             qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
             qpos = np.append(qpos, qpos_diff[:7])
@@ -120,7 +119,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
             gpos = root['/observations/gpos'][start_ts]
             gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][0])]
             gpos = np.append(gpos, gpos_diff[:7])
-            
             
             # gpos = gpos[:7] # 兼顾实物机器人和仿真机器人
             # gpos =  np.append(gpos,qpos[7])
@@ -131,44 +129,81 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
                 
             # get all actions after and including start_ts
-            if is_sim:
+            # if is_sim:
+            action_len = end_ts - start_ts + 1 
+            if action_len <= self.num_queries:
                 action = root['/action'][start_ts : end_ts + 1]
-                action_len = end_ts - start_ts + 1 # episode_len 不是固定了的
+            else:
+                action = root['/action'][start_ts : start_ts + self.num_queries]
+            action_len = min(action_len, self.num_queries)    
+            
             # else:
             #     action = root['/action'][max(0, start_ts - 1) : end_ts + 1] # hack, to make timesteps more aligned
             #     action_len = end_ts - max(0, start_ts - 1) + 1 # hack, to make timesteps more aligned
-                
-            history_action = root['/action'][0 : start_ts+1]
+            
+            # 加入历史图像和历史action
+            history_images = []
+            history_image_dict = dict()
             history_action_len = start_ts + 1
-        
-        padded_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32) # 随机抽样的结果当中只剩余17步了之后，也会推广到32，方便后面做action chunking 的截取，也就是说最大的quary就是max_len
-        padded_action[:action_len] = action # 如果这里报错，去看看command json是不是多给了一个action步骤#######################
-        
-        padded_history_action = np.zeros((max_len,) + original_action_shape[1:], dtype=np.float32)
-        # padded_history_action[-history_action_len:] = history_action # 前面是空白，后面是最近的action_pos
-        padded_history_action[:history_action_len] = history_action # 往前面添加historyaction
-        
-        is_pad_action = np.zeros(max_len)
+            if history_action_len <= self.num_queries:
+                history_action = root['/action'][0 : start_ts + 1]
+                for history_idx in range(start_ts + 1):
+                    for cam_name in self.camera_names:
+                        history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
+                    history_images.append(history_image_dict.copy())
+            else:
+                history_action = root['/action'][start_ts - self.num_queries : start_ts]
+                for history_idx in range(start_ts - self.num_queries, start_ts + 1):
+                    for cam_name in self.camera_names:
+                        history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
+                    history_images.append(history_image_dict.copy())
+            history_action_len = min(history_action_len, self.num_queries)
+            
+        padded_action = np.zeros((self.num_queries,) + original_action_shape[1:], dtype=np.float32) 
+        # 随机抽样的结果当中只剩余17步了之后，也会推广到32，方便后面做action chunking 的截取，也就是说最大的quary就是max_len
+        padded_action[:action_len] = action[:action_len] # 如果这里报错，去看看command json是不是多给了一个action步骤
+        padded_history_action = np.zeros((self.num_queries,) + original_action_shape[1:], dtype=np.float32)
+        is_pad_action = np.zeros(self.num_queries)
         is_pad_action[action_len:] = 1
         
-        ############# 为history_action准备的is_pad
-        is_pad_history = np.zeros(max_len)
+        history_action = history_action[::-1] # 翻转 history_action
+        padded_history_action[:history_action_len] = history_action[:history_action_len] # 往前面添加historyaction
+        is_pad_history = np.zeros(self.num_queries)
         is_pad_history[history_action_len:] = 1 # 前面是空白，后面是最近的action_pos
         
         # new axis for different cameras
         all_cam_images = []
         for cam_name in self.camera_names: ###############################################################
-            if 'sawyer' in self.dataset_dir:
-                image_dict[cam_name] = cv.resize(image_dict[cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
-            
+            # if 'sawyer' in self.dataset_dir: # 已经在数据集中调整过了
+            #     image_dict[cam_name] = cv.resize(image_dict[cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
+                
             # if mamba
             # image_dict[cam_name] = image_dict[cam_name][0:120, 20:140, :] # Slicing to crop the image
             # image_dict[cam_name] = cv.resize(image_dict[cam_name], (224, 224))
             # print(image_dict[cam_name].shape)
             all_cam_images.append(image_dict[cam_name])
-            
         all_cam_images = np.stack(all_cam_images, axis=0)
-
+        
+        # history_images 加入图像
+        history_all_cam_images = []
+        for history_idx in range(history_action_len):
+            all_history_cam_images = []
+            for cam_name in self.camera_names: 
+                # if 'sawyer' in self.dataset_dir:
+                #     history_images[history_idx][cam_name] = cv.resize(history_images[history_idx][cam_name], (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR)
+                    
+                all_history_cam_images.append(history_images[history_idx][cam_name])
+            all_history_cam_images = np.stack(all_cam_images, axis=0)
+            history_all_cam_images.append(all_history_cam_images)
+            
+        original_images_shape = np.shape(history_all_cam_images)
+        padded_history_images = np.zeros((self.num_queries,) + original_images_shape[1:], dtype=np.float32)
+        history_all_cam_images = history_all_cam_images[::-1] # 以第一个维度倒序
+        padded_history_images[:history_action_len] = history_all_cam_images[:history_action_len] # 往前面添加 padded_history_images
+        
+        history_all_cam_images = np.array(padded_history_images)
+        history_images_data = torch.from_numpy(history_all_cam_images)
+        
         # Constructing the observations
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
@@ -180,19 +215,21 @@ class EpisodicDataset(torch.utils.data.Dataset):
         
         # Adjusting channel
         image_data = torch.einsum('k h w c -> k c h w', image_data)
-
+        history_images_data = torch.einsum('q k h w c -> q k c h w', history_images_data) # 多一个querry，chunking的队列长度
+        
         # normalize image and change dtype to float
         image_data = image_data / 255.0
+        history_images_data = history_images_data / 255.0
+        
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
         gpos_data = (gpos_data - self.norm_stats["gpos_mean"]) / self.norm_stats["gpos_std"]
         history_action_data = (history_action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         
         if self.use_language:
-            return image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding
+            return image_data, qpos_data, gpos_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding
         else:
-            return image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action
-        # return image_data, qpos_data, action_data, is_pad
+            return image_data, qpos_data, gpos_data, history_images_data,  history_action_data, is_pad_history, action_data, is_pad_action
 
 
 def get_norm_stats(dataset_dir, num_episodes):
@@ -250,7 +287,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, max_len=None, command_list=None, use_language=False, language_encoder=None):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, max_len=None, num_queries=None, command_list=None, use_language=False, language_encoder=None):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -262,8 +299,8 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_len, command_list, use_language, language_encoder)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, max_len, command_list, use_language, language_encoder)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder)
     
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)

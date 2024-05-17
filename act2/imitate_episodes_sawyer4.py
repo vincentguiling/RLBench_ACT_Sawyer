@@ -142,7 +142,7 @@ def main(args):
     
     # 如果不是evaluation
     train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, 
-                                                           max_len=max_skill_len, command_list=commands, use_language=use_language, language_encoder=language_encoder)
+                                                           max_len=max_skill_len, num_queries=chunk_size, command_list=commands, use_language=use_language, language_encoder=language_encoder)
 
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -213,7 +213,8 @@ def generate_command_embedding(command, t, language_encoder, tokenizer, model, i
     
     
 def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation=0):
-    set_seed(20)
+    seed = 60
+    set_seed(seed)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
@@ -224,6 +225,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     task_name = config['task_name']
     temporal_agg = config['temporal_agg']
     
+    hidden_dim = policy_config['hidden_dim']
     action_dim = 8
     ##################################################
     use_language = config["use_language"]
@@ -257,7 +259,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     if not real_robot:
         from sim_env import make_sim_env
         env = make_sim_env(task_name)
-        
+        print("random seed = ", seed)
         env_max_reward = 1 # env.task.max_reward
     # chunk_size = num_queries
     query_frequency = policy_config['num_queries']
@@ -300,9 +302,8 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         target_gpos_list = []
         rewards = []
         
-        
-        history_action = np.zeros((max_timesteps,) + (action_dim,), dtype=np.float32)
-        # print(f"{np.shape(history_action)=}")
+        history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
+        history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
         
         with torch.inference_mode():
             path = []
@@ -321,11 +322,10 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                     # image_list.append({'wrist':obs.wrist_rgb, 'head':obs.head_rgb, })
                     image_list.append({'front':obs.front_rgb, 'head':obs.head_rgb, 'wrist':obs.wrist_rgb})
                 
-                
                 qpos_numpy = np.array(np.append(obs.joint_positions, obs.gripper_open)) # 7 + 1 = 8
                 qpos_diff = [a - b for a,b in zip(obs.joint_positions, qpos_initial)]
                 qpos_numpy = np.array(np.append(qpos_numpy, qpos_diff)) # 7 + 1 + 7 = 15
-                # qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15
+                # qpos_numpy = np.array(np.append(qpos_numpy, obs.gripper_pose)) # 7 + 1 + 7 = 15 # 原始的
                 qpos = pre_process_qpos(qpos_numpy)
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
@@ -341,7 +341,6 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 history_action_numpy = np.array(history_action)
                 history_action_numpy = pre_process_action_history(history_action_numpy)
                 history_action_numpy = torch.from_numpy(history_action_numpy).float().cuda()
-                # history_action_numpy = torch.from_numpy(history_action_numpy).float().cuda().unsqueeze(0)
                 
                 curr_image = get_image(obs, camera_names) # 获取帧数据的图像
 
@@ -356,8 +355,8 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                             command_embedding = generate_command_embedding(command, t, language_encoder, tokenizer, model)
                             # print(command_embedding)
                         
-                        all_actions = policy(qpos, gpos, curr_image, 
-                                             history_action_numpy, is_pad_history=is_pad_history, 
+                        all_actions, image_feature = policy(qpos, gpos, curr_image, 
+                                             history_image_feature, history_action_numpy, is_pad_history=is_pad_history, 
                                              actions=None, is_pad_action=None, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
                         
                         language_correction = False
@@ -393,11 +392,11 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)  # 就是因为这个的保护和限制，所以初始化位置不能随意改变
                 # target_qpos = action
+
+                history_action = np.insert(history_action, 0, action, axis=0)[:num_queries]
                 
-                # print(f"{np.shape(history_action)=}, {np.shape(action)=}")
-                
-                # history_action = np.append(history_action[1:], [action], axis=0) # 推陈出新
-                history_action = np.insert(history_action, 0, action, axis=0)[:max_timesteps]
+                history_image_feature[0] = np.insert(history_image_feature[0], 0, image_feature[0], axis=0)[:num_queries]
+                history_image_feature[1] = np.insert(history_image_feature[1], 0, image_feature[1], axis=0)[:num_queries]
                 
                 ###################################################
                 # 将action_diff作为action
@@ -439,7 +438,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                                 done = env._robot.gripper.actuate(1, 0.4)
                                 env._scene.step() # Scene 步进
                     else:
-                        if gripper_state < 0.80 and gripper_flag < 2 : # 适合步骤1 夹取
+                        if gripper_state < 0.90 and gripper_flag < 2 : # 适合步骤1 夹取
                             print(timestep,": close_gripper: ", gripper_state)
                             gripper_flag = gripper_flag + 2 # 留出一帧错误
                             # while done != 1:
@@ -542,17 +541,18 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
 
 
 def forward_pass(data, policy):
-    if len(data) == 8:  # use_language
-        image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding = data
+    if len(data) == 9:  # use_language
+        image_data, qpos_data, gpos_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding = data
         command_embedding = command_embedding.cuda()
-    else: # len = 7
-        image_data, qpos_data, gpos_data, history_action_data, is_pad_history, action_data, is_pad_action = data
+    else: # len = 8
+        image_data, qpos_data, gpos_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action = data
         command_embedding = None
         
     image_data, qpos_data, gpos_data, = image_data.cuda(), qpos_data.cuda(), gpos_data.cuda()
-    history_action_data, is_pad_history, action_data, is_pad_action = history_action_data.cuda(), is_pad_history.cuda(), action_data.cuda(), is_pad_action.cuda()
+    history_images_data, history_action_data, is_pad_history = history_images_data.cuda(),history_action_data.cuda(), is_pad_history.cuda()
+    action_data, is_pad_action = action_data.cuda(), is_pad_action.cuda()
     
-    return policy(qpos_data, gpos_data, image_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding) # TODO remove None # 提供了action data 不是训练模式
+    return policy(qpos_data, gpos_data, image_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding) # TODO remove None # 提供了action data 不是训练模式
 
 
 def train_bc(train_dataloader, val_dataloader, config):

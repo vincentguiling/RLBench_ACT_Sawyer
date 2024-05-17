@@ -51,14 +51,17 @@ class Transformer(nn.Module):
         if len(src.shape) == 4: # has H and W
             # flatten NxCxHxW to HWxNxC
             bs, c, h, w = src.shape
-            src = src.flatten(2).permute(2, 0, 1)
-            pos_embed = pos_embed.flatten(2).permute(2, 0, 1).repeat(1, bs, 1) # 图像的编码，有几个图像就加了几个的，不用管它
+            src = src.flatten(2).permute(2, 0, 1) # (bs, 512, 4, 5) -> 4x5=20 (20, bs, 512) , 所以一张照片结果是20个encoder输入
+            
+            pos_embed = pos_embed.flatten(2).permute(2, 0, 1) # (1, 512, 4, 5) ->（20, 1, 512） # pos_embed传进来的时候是没有batch_size信息的
+            pos_embed = pos_embed.repeat(1, bs, 1) # （20, 1, 512） ->（20, 8, 512）
             
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
             # mask = mask.flatten(1)
-
+            
             additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim 
-            pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
+            pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0) # (20, 8, 512) -> (23, 8, 512)
+            
             if command_embedding is not None:
                 addition_input = torch.stack(
                     [latent_input, proprio_input_qpos, command_embedding], axis=0
@@ -69,7 +72,6 @@ class Transformer(nn.Module):
             src = torch.cat([addition_input, src], axis=0)
         else:
             assert len(src.shape) == 3
-            print("src.shape=3")
             # flatten NxHWxC to HWxNxC
             bs, hw, c = src.shape
             src = src.permute(1, 0, 2)

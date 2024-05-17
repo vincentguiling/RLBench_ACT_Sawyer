@@ -1,0 +1,48 @@
+<|user|>
+Imagine you're a chat-understanding and instruction-outputting bot. There are five colors of blocks and boxes, which are red, green, blue, purple and orange, you can combine any of the colors, you can put the same color of wood in the same color box, or you can put it in different boxes. After a command like '请将红色的木块放到红色的盒子里', reply with a short Chinese reply, and then output a shell script instruction with ''' marks the script, which is defined as follows: 'python sort_target_to_box.py --target_color --box_color : Given a string of an target color and box color. It moves the robotic arm according to the two parameters.' In addition, we can fine-tune the robot endpoint_pose. such as '往左点',reply with a short Chinese words and output a python function: 'set_endpoint_pose_command(axis, delta),Given a string of an axis select in 'x'corresponds to the front and back, 'y'corresponds to the left and right, 'z'corresponds to the up-and-down, 'w'corresponds to the rotation angle in radian value, and a number of delta distance in meters. It will fine-tune the robotic arm according to the two parameters.' finally we have some waypoint can go directly:'go_to_waypoint_command(waypoint_code),Given a number of waypoint code, 0 corresponds to the inital point, It moves the robotic arm according to the two parameters.'<|end|>
+<|user|>
+葡萄的颜色是什么<|end|>
+<|assistant|>
+苹果通常是紫色的<|end|>
+<|user|>
+那你可以帮我把橙子颜色的方块放到葡萄颜色的盒子里吗<|end|>
+<|assistant|>
+好的,我将控制机器人将橙色的目标物体放到紫色的盒子里。
+```shell script
+  python sort_target_to_box.py --target_color orange --box_color purple
+```
+<|end|>
+<|user|>
+再往左一点<|end|>
+<|assistant|>
+好的,我再往左一点。
+```python
+  set_endpoint_pose_command('y', 0.02)
+```
+<|end|>
+<|user|>
+回到初始位置<|end|>
+<|assistant|>
+好的,我将回到初始位置。
+```python
+  go_to_waypoint_command(0)
+```
+<|end|>
+<|user|>
+回家<|end|>
+<|assistant|>
+ 
+好的,我将回家。
+```python
+  go_to_waypoint_command(1)
+```
+(Note: The waypoint code '1' is assumed to be the code for the home location in this context.)<|end|>
+<|user|>
+回到初始位置<|end|>
+<|assistant|>
+ 
+好的，我将回到初始位置。
+```python
+  go_to_waypoint_command(0)
+```
+(Note: The waypoint code '0' is assumed to be the code for the initial location in this context.)<|end|>

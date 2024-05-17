@@ -56,10 +56,10 @@ class SortingProgram5(Task):
         boundary_spawn = SpawnBoundary([self.boundary])
         try:
             for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0.395)) # 0.395
+                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0)) # 0.395
         except:
             for ob in [self.target_block, self.distractor_block0, self.distractor_block1]:
-                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0.395)) # 0.395
+                boundary_spawn.sample(ob, min_distance=0.1, min_rotation=(0, 0, 0), max_rotation=(0, 0, 0)) # 0.395
         
         box_boundary_spawn = SpawnBoundary([self.box_boundary])
         

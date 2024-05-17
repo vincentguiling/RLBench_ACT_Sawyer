@@ -30,21 +30,32 @@ from intera_core_msgs.msg import (
 target_color = 'red'
 box_color = 'red'
 
-task_name = 'sorting_program_sawyer21'
-ckpt_dir = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer212/50demo_36step_20chunk_8batch_efficientnet_b0'
-ckpt_name = 'policy_best_epoch1000.pth'
-learning_rate = 1e-5
-
-task_name_21 = ''
-ckpt_dir_21 = ''
-ckpt_name_21 = ''
-
-task_name_22 = ''
-ckpt_dir_22 = ''
-ckpt_name_22 = ''
-
 GRIPPER_PARAM = 0.02 # 0.02是4cm方块矫正 0.03空载矫正
 IF_AUTO = False
+
+if box_color == 'red':
+  # reach to red tartget
+  task_name_21 = 'sorting_program_sawyer21'
+  ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer21/60demo_36step_10chunk_8batch_efficientnet_b3'
+  ckpt_name_21 = 'policy_best_epoch1000.pth'
+  learning_rate = 2e-6
+  
+  if box_color == 'red': # red to red
+    task_name_22 = 'sorting_program_sawyer22'
+    ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer22/50demo_77step_10chunk_8batch_efficientnet_b0'
+    ckpt_name_22 = 'policy_best_epoch1000.pth'
+
+task_name = task_name_21
+ckpt_dir = ckpt_dir_21
+ckpt_name = ckpt_name_21
+
+# 测试，
+# 上方：
+# 1,22，33
+# 中方：偏上
+# 44，5，6，
+# 下方：偏右
+# 77，88，99，
 
 ########################### 修改的参数 ###########################
 
@@ -61,14 +72,10 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
     
   pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
   pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
-  pre_process_action_history = lambda s_action: (s_action - stats['action_mean']) / stats['action_std']
   post_process = lambda a: a * stats['action_std'] + stats['action_mean']
   
   query_frequency = 1
-  num_queries = 20 # chunking_size ################################
-  action_dim = 8
-  hidden_dim = 512
-  
+  num_queries = 10 # chunking_size
   if task_name == 'sorting_program_sawyer21':
     max_timesteps = int(max_timesteps * 2.4)  # 做一个scale ##############################################################
   elif task_name == 'sorting_program_sawyer22':
@@ -98,7 +105,6 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
     gpos_dict = limb.endpoint_pose()
     position_initial = gpos_dict['position']
     orientation_initial = gpos_dict['orientation']
-    
     gpos_initial = [position_initial.x, position_initial.y, position_initial.z, orientation_initial.x, orientation_initial.y, orientation_initial.z, orientation_initial.w]  
   
   if task_name == 'sorting_program_sawyer22':
@@ -129,14 +135,14 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
 
     joint_angles = limb.ik_request(approach, tip_name) # 逆向运动学
     
-    limb.set_joint_position_speed(0.06) #0.06非常稳 #############################################################################
+    limb.set_joint_position_speed(0.06) ##############################################################################
     done = limb.move_to_joint_positions(joint_angles, timeout = 1/clac_rate) # 运动到目标位置
     
     # 处理夹爪：
     # print(f"{target_gpos[7]=}")
     
-    if gripper_state == 1 and target_gpos[7] <= 0.3:
-      print("close the gripper:",target_gpos[7])
+    if gripper_state == 1 and target_gpos[7] <= 0.6:
+      print("close the gripper")
       gripper.close()
       if task_name == 'sorting_program_sawyer21':
         timestep = max_timesteps
@@ -208,42 +214,24 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
               print("这里还是执行了")
               sys.exit()
       
-  history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
-  history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
-  
-  def policy_model_calc(policy, curr_image, qpos_current, qpos_diff, gpos_current, gpos_diff):
-    nonlocal history_action, history_image_feature, max_timesteps, timestep
-    
+      
+  def policy_model_calc(policy, curr_image, qpos_current, gpos_current):
     with torch.inference_mode(): # 模型推理
       image_list.append({'wrist':curr_image})
 
       qpos_numpy = np.array(qpos_current) # 7 + 1 + 7 = 15
-      qpos_numpy = np.array(np.append(qpos_numpy, qpos_diff)) # 7 + 1 + 7 = 15
       qpos_numpy = pre_process_qpos(qpos_numpy)
       qpos_numpy = torch.from_numpy(qpos_numpy).float().cuda().unsqueeze(0)
       
       gpos_numpy = np.array(gpos_current) # 7 + 1 + 7 = 15
-      gpos_numpy = np.array(np.append(gpos_numpy, gpos_diff)) # 7 + 1 + 7 = 15
       gpos_numpy = pre_process_gpos(gpos_numpy)
       gpos_numpy = torch.from_numpy(gpos_numpy).float().cuda().unsqueeze(0)
       
-      history_action_numpy = np.array(history_action)
-      history_action_numpy = pre_process_action_history(history_action_numpy)
-      history_action_numpy = torch.from_numpy(history_action_numpy).float().cuda()
-    
-      is_pad_history = np.zeros(max_timesteps)
-      is_pad_history[timestep:] = 1
-      is_pad_history = torch.from_numpy(is_pad_history).bool().cuda()
       
       ### query policy
       if timestep % query_frequency == 0:
         command_embedding = None
-        all_actions, image_feature = policy(qpos_numpy, gpos_numpy, curr_image, 
-                             history_image_feature, history_action_numpy, 
-                             is_pad_history=is_pad_history,
-                             actions=None, is_pad_action=None, 
-                             command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
-        
+        all_actions = policy(qpos_numpy, gpos_numpy, curr_image, command_embedding=command_embedding) # 100帧才预测一次，# 没有提供 action 数据，是验证模式
 
       all_time_actions[[timestep], timestep: timestep+num_queries] = all_actions
       actions_for_curr_step = all_time_actions[:, timestep]
@@ -259,12 +247,8 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       ### post-process actions
       raw_action = raw_action.squeeze(0).cpu().numpy()
       action = post_process(raw_action)  # 就是因为这个的保护和限制，所以初始化位置不能随意改变
-      go_to_next_gpos(action)   
-      
-      history_action = np.insert(history_action, 0, action, axis=0)[:num_queries]
-      history_image_feature[0] = np.insert(history_image_feature[0], 0, image_feature[0], axis=0)[:num_queries]
-      history_image_feature[1] = np.insert(history_image_feature[1], 0, image_feature[1], axis=0)[:num_queries]
-        
+      go_to_next_gpos(action)     
+      # print(f"{action}") 
 
   def get_observations(data): # 30Hz
     nonlocal image_get_count, image_list, qpos, gripper_state, gpos, timestep, timestep, qpos_initial, gpos_initial
@@ -276,7 +260,7 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       image = bridge.imgmsg_to_cv2(data,  desired_encoding='rgb8')
       wrist_image_current = image
       # if task_name == 'sorting_program_sawyer21':
-      wrist_image_current = cv.resize(image, (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_AREA) # wrist_rgb
+      wrist_image_current = cv.resize(image, (0, 0), fx=0.25, fy=0.25, interpolation=cv.INTER_LINEAR) # wrist_rgb
       
       # 用小的训练，然后用高清的推理
       
@@ -287,13 +271,13 @@ def observation_to_action(policy, max_timesteps, ckpt_dir):
       curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
       
       qpos_diff = [a-b for a,b in zip(qpos, qpos_initial)]
-      qpos_current = qpos + [gripper_state]
+      qpos_current = qpos + [gripper_state] + qpos_diff
       
       gpos_diff = [a-b for a,b in zip(gpos, gpos_initial)]
-      gpos_current = gpos + [gripper_state] 
+      gpos_current = gpos + [gripper_state] + gpos_diff
       
       # print(f"{len(gpos_initial)=},{len(gpos_diff)=}")
-      policy_model_calc(policy, curr_image, qpos_current, qpos_diff, gpos_current, gpos_diff)
+      policy_model_calc(policy, curr_image, qpos_current, gpos_current)
 
 
   def get_gpos(data): # gpos # 100Hz
@@ -398,12 +382,12 @@ def buil_model(ckpt_dir, ckpt_name):
   dec_layers = 7
   nheads = 8 # 8头注意力机制
   policy_config = {'lr': learning_rate,
-                    'num_queries': 20,
+                    'num_queries': 10,
                     'kl_weight': 10,
                     'hidden_dim': 512,
                     'dim_feedforward': 3200,
                     'lr_backbone': 1e-5,
-                    'backbone': 'efficientnet_b0' if task_name == 'sorting_program_sawyer21' else 'efficientnet_b0',
+                    'backbone': 'efficientnet_b3' if task_name == 'sorting_program_sawyer21' else 'efficientnet_b0',
                     'enc_layers': enc_layers,
                     'dec_layers': dec_layers,
                     'nheads': nheads,
@@ -422,8 +406,7 @@ def buil_model(ckpt_dir, ckpt_name):
 
 
 def main():
-  global target_color, box_color, IF_AUTO, task_name, ckpt_dir, ckpt_name
-  global task_name_21, ckpt_dir_21, ckpt_name_21, task_name_22, ckpt_dir_22, ckpt_name_22
+  global target_color, box_color, IF_AUTO
   parser = argparse.ArgumentParser()
   parser.add_argument("--target_color", type=str, default="red",
                       help="the target color to pick up")
@@ -435,44 +418,6 @@ def main():
   
   if target_color != None:
     IF_AUTO = True
-    
-  ###############################
-  task_name_21 = 'sorting_program_sawyer21'
-  task_name_22 = 'sorting_program_sawyer22'
-  if target_color == 'red':
-    ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer211/50demo_36step_20chunk_8batch_efficientnet_b0'
-    ckpt_name_21 = 'policy_best_epoch4000.pth'
-    if box_color == 'red': # red to red
-      ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer221/50demo_77step_20chunk_8batch_efficientnet_b0'
-      ckpt_name_22 = 'policy_best_epoch1000.pth'
-      
-  elif target_color == 'blue':
-    ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer212/50demo_36step_20chunk_8batch_efficientnet_b0'
-    ckpt_name_21 = 'policy_best_epoch4000.pth'
-    if box_color == 'green': # blue to green
-      ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer222/50demo_77step_20chunk_8batch_efficientnet_b0'
-      ckpt_name_22 = 'policy_best_epoch1000.pth'
-      
-  elif target_color == 'green':
-    ckpt_dir_21 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer213/50demo_36step_20chunk_8batch_efficientnet_b0'
-    ckpt_name_21 = 'policy_best_epoch4000.pth'
-    if box_color == 'red': # green to red
-      ckpt_dir_22 = '/home/boxjod/RLBench_ACT_Sawyer/Trainings/sorting_program_sawyer223/50demo_77step_20chunk_8batch_efficientnet_b0'
-      ckpt_name_22 = 'policy_best_epoch2000.pth'
-      
-  task_name = task_name_21
-  ckpt_dir = ckpt_dir_21
-  ckpt_name = ckpt_name_21
-  
-  # 测试，
-  # 上方：
-  # 11,11,1,11
-  # 中方：11,11,11
-  # 11,11,11
-  # 下方：11,11,11
-  # 11,11,11
-  
-  ###########################
   
   print("Initializing node... ")
   rospy.init_node('verification_sawyer_node')

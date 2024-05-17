@@ -67,6 +67,7 @@ class DETRVAE(nn.Module):
         if backbones is not None:
             self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1) # 卷积层
             self.backbones = nn.ModuleList(backbones) 
+            
             self.input_proj_robot_state_qpos = nn.Linear(15, hidden_dim)
             self.input_proj_robot_state_gpos = nn.Linear(15, hidden_dim)
             
@@ -90,10 +91,13 @@ class DETRVAE(nn.Module):
         
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
-        pos_embed_dim = 4 if self.use_language else 3 ####################################################### 加了1，因为gpos分开了
-        self.additional_pos_embed = nn.Embedding(pos_embed_dim, hidden_dim) # learned position embedding for proprio and latent#######################################################
+        pos_embed_dim = 4 if self.use_language else 3 #因为command_embedding 加了1，因为gpos分开了 加了1
+        self.additional_pos_embed = nn.Embedding(pos_embed_dim, hidden_dim) # learned position embedding for proprio and latent
 
-    def forward(self, qpos, gpos, image, env_state, history_action=None, is_pad_history=None, actions=None, is_pad_action=None, command_embedding=None):
+    def forward(self, qpos, gpos, image, env_state, 
+                history_images=None, history_action=None, is_pad_history=None, 
+                actions=None, is_pad_action=None, 
+                command_embedding=None):
         """
         qpos: batch, qpos_dim
         gpos: batch, gpos_dim
@@ -105,7 +109,6 @@ class DETRVAE(nn.Module):
         is_training = actions is not None # train or val
         bs, _ = qpos.shape # bs = Batch_Size
         
-        # print(f"{qpos.shape=}")
         # Project the command embedding to the required dimension
         if command_embedding is not None:
             if self.use_language:
@@ -114,132 +117,184 @@ class DETRVAE(nn.Module):
                 raise NotImplementedError
         
         ### Obtain latent z from action sequence
-        # if is_training:
-        #     # project action sequence to embedding dim, and concat with a CLS token
-        #     action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim), (8,10) x (8, 10, 512) 
-        #     qpos_embed = self.encoder_qpos_proj(qpos)  # (bs, hidden_dim), (8, 512)
-        #     qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim), (8, 1, 512)
-            
-        #     ################
-        #     # gpos单独编码
-        #     gpos_embed = self.encoder_gpos_proj(gpos)  # (bs, hidden_dim)
-        #     gpos_embed = torch.unsqueeze(gpos_embed, axis=1)  # (bs, 1, hidden_dim)
-        #     ################
-            
-        #     cls_embed = self.cls_embed.weight # (1, hidden_dim)
-        #     cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
-            
-        #     encoder_input = torch.cat([cls_embed, qpos_embed, gpos_embed, action_embed], axis=1) # (bs, seq+3, hidden_dim), (8, 13, 512)
-        #     encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
-            
-        #     # do not mask cls token
-        #     cls_joint_is_pad = torch.full((bs, 3), False).to(qpos.device) # False: not a padding, (8,2) 2->3 (8, 3)
-        #     is_pad_action = torch.cat([cls_joint_is_pad, is_pad_action], axis=1)  # (bs, seq+1), (8, 12) -> (8, 13)
-        #     # 其实transformer还是固定长度输入，只是使用了cls填充了不是固定长度的值
-            
-        #     # obtain position embedding
-        #     pos_embed = self.pos_table.clone().detach()
-        #     pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
-            
-        #     # query model
-        #     encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_action)
-        #     encoder_output = encoder_output[0] # take cls output only
-            
-        #     latent_info = self.latent_proj(encoder_output)
-        #     mu = latent_info[:, :self.latent_dim] # mu 是做隐层的映射，用来干什么了？
-        #     logvar = latent_info[:, self.latent_dim:] # logvar是隐层的另一个维度的映射提取
-        #     latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
-        #     latent_input = self.latent_out_proj(latent_sample)
-            
-            
-        #     # # 测试一下没有风格变量Z，几乎没有影响，那我直接把历史图像全部压缩进去怎么样
-        #     mu = logvar = None
-        #     latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
-        #     latent_input = self.latent_out_proj(latent_sample)
-            
-        # else: # 验证的时候没用Z吗？ 对，Z=0向量
-        #     mu = logvar = None
-        #     latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
-        #     latent_input = self.latent_out_proj(latent_sample)
+        use_history = True
+        use_history_images = True
         
-        ########################################
-        # 历史action用encoder编码之后输出【后面可以吧图像也加进来】
+        if use_history: # 历史 action 和 images 用 encoder 编码之后输出
+            history_action_embed = self.encoder_action_proj(history_action) # (bs, seq, hidden_dim), (8,10) x (8, 512)  = (8, 10, 512)
+            cls_embed = self.cls_embed.weight # (1, hidden_dim)
+            cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
+            
+            if use_history_images:
                 
-        history_action_embed = self.encoder_action_proj(history_action)# (bs, seq, hidden_dim), (8,10) x (8, 512)  = (8, 10, 512)
-        cls_embed = self.cls_embed.weight # (1, hidden_dim)
-        # print(f"{history_action_embed.shape=}")
-        # print(f"{cls_embed.shape=}")
-        
-        cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
-        # print(f"{cls_embed.shape=}, {history_action_embed.shape=}")
-        
-        if not is_training:
-            history_action_embed = torch.unsqueeze(history_action_embed, axis=0).repeat(bs, 1, 1)
-            is_pad_history = torch.unsqueeze(is_pad_history, axis=0).repeat(bs, 1)
-            is_pad_history = is_pad_history[:,]
-            
-        # print(f"{is_pad_history.shape=}")
-        encoder_input = torch.cat([cls_embed, history_action_embed], axis=1) # (bs, seq+3, hidden_dim), (8, 13, 512)
-        encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
+                if not is_training:
+                    history_action_embed = torch.unsqueeze(history_action_embed, axis=0).repeat(bs, 1, 1)
+                    is_pad_history = torch.unsqueeze(is_pad_history, axis=0).repeat(bs, 1) # (1, 90) 8*10
+                    
+                    # 利用历史编码的数据，直接输入
+                    history_all_cam_src = torch.from_numpy(history_images[0]).unsqueeze(0).cuda() # (1,10,512) bs = 1
+                    history_all_cam_pos = torch.from_numpy(history_images[1]).unsqueeze(0).cuda() # (1,10,512) bs = 1 # 每次用的都是一模一样的，只要形状一样
+                    
+                else:
+                    # 使用backbone 对 history_images 图像处理【只有在训练的时候才会现场编译】【直接把 num_queries 叠加到 batch_size 上 】
+                    # [batch_size, history_idx, cam_id, chanel, width, height] -> [batch_size * history_idx, cam_id, chanel, width, height]
+                    target_shape = np.append(-1, history_images.shape[2:]) 
+                    history_images = history_images.view(target_shape[0], target_shape[1], target_shape[2], target_shape[3], target_shape[4])
+                    
+                    history_all_cam_src = []
+                    history_all_cam_pos = []
+                    for cam_id, cam_name in enumerate(self.camera_names): # 0 ‘wrist’
+                        
+                        features, pos = self.backbones[cam_id](history_images[:, cam_id]) # [batch_size * history_idx, , cam_id, chanel, width, height]
+                        features = features[0] # take the last layer feature [80, 1536, 4, 5]
+                        pos = pos[0] # take the last layer pos [10, 512, 4, 5]
+                        
+                        history_all_cam_src.append(self.input_proj(features)) # 训练的时候[80, 1536, 4, 5] -> [80, 512, 4, 5] -> [1, 80, 512, 4, 5]
+                        history_all_cam_pos.append(pos)  # pos的 shape 本来就是 512，有多少层呢？
+                        
+                    # fold camera dimension into width dimension [1, 80, 512, 4*n, 5] -> [80, 512, 4*n, 5], 把多张图片折叠到了 width 维度
+                    history_all_cam_src = torch.cat(history_all_cam_src, axis=3)  
+                    history_all_cam_pos = torch.cat(history_all_cam_pos, axis=3)  # [1, 10, 512, 4*n, 5] -> [10, 512, 4*n, 5]
+                    
+                    # 如何处理成Transformer Encoder的输入格式 (bs, 512, 4, 5) -> 4x5=20 (bs, 512, 20) -> (bs,1, 512)
+                    history_all_cam_src = history_all_cam_src.flatten(2) 
+                    history_all_cam_src = torch.mean(history_all_cam_src, dim=2).unsqueeze(1) 
+                    
+                    # (1, 512, 4, 5) -> (num_queries, 512,20）->  (num_queries, 512) -> (1, num_queries, 512) pos本身不需要batch_size，是共享的
+                    history_all_cam_pos = history_all_cam_pos.flatten(2).repeat(self.num_queries, 1, 1) 
+                    history_all_cam_pos = torch.mean(history_all_cam_pos, dim=2).unsqueeze(0)  
+                    
+                    # src = (80,1,512) -> (8,10,512)； 
+                    history_all_cam_src = history_all_cam_src.view(bs, self.num_queries, self.hidden_dim) # [bs, seq, 512]
+                
+                # (bs, 1 + seq + seq, hidden_dim) -> (1 + seq + seq, bs, hidden_dim)
+                encoder_input = torch.cat([cls_embed, history_action_embed, history_all_cam_src], axis=1) 
+                encoder_input = encoder_input.permute(1, 0, 2) 
+                
+                # (bs, 1 + seq + seq)
+                cls_joint_is_pad = torch.full((bs, 1), False).to(qpos.device) 
+                is_pad_history = torch.cat([cls_joint_is_pad, is_pad_history, is_pad_history], axis=1)
+                
+                # (1, seq + seq + 1, hidden_dim) -> (seq + seq + 1, 1, hidden_dim)
+                pos_embed = self.pos_table.clone().detach()
+                pos_embed = torch.cat([pos_embed, history_all_cam_pos], axis=1)
+                pos_embed = pos_embed.permute(1, 0, 2)  
+                # print(f"{encoder_input.shape=}")
+                # return
+                encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_history)     
+            else:
+                if not is_training: # 需要伪装一个 batch_size 出来
+                    history_action_embed = torch.unsqueeze(history_action_embed, axis=0).repeat(bs, 1, 1)
+                    is_pad_history = torch.unsqueeze(is_pad_history, axis=0).repeat(bs, 1) # (1, 90) 8*10
+                    
+                encoder_input = torch.cat([cls_embed, history_action_embed], axis=1) # (bs, 1 + seq, hidden_dim) -> (1 + seq, bs, hidden_dim)
+                encoder_input = encoder_input.permute(1, 0, 2) 
+                
+                cls_joint_is_pad = torch.full((bs, 1), False).to(qpos.device) # (bs, 1 + seq)
+                is_pad_history = torch.cat([cls_joint_is_pad, is_pad_history], axis=1)
 
-        cls_joint_is_pad = torch.full((bs, 1), False).to(qpos.device) # (8,1)
-        is_pad_history = torch.cat([cls_joint_is_pad, is_pad_history], axis=1)  # (bs, seq+1), (8, 10) -> (8, 11)
-        
-        pos_embed = self.pos_table.clone().detach()
-        pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
-        
-        encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_history)
-        encoder_output = encoder_output[0] # take cls output only
-        
-        latent_info = self.latent_proj(encoder_output) # 映射到 (hidden_dim, self.latent_dim*2)
-        mu = latent_info[:, :self.latent_dim] # mu取前面latent_dim
-        logvar = latent_info[:, self.latent_dim:] # logvar取后面latent_dim
-        latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
-        latent_input = self.latent_out_proj(latent_sample)
-        
-        # mu = logvar = None
-        # latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
-        # latent_input = self.latent_out_proj(latent_sample)
+                pos_embed = self.pos_table.clone().detach()# (1, seq + 1, hidden_dim) -> (seq + 1, 1, hidden_dim)
+                pos_embed = pos_embed.permute(1, 0, 2)  
+                
+                encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_history)
+                
+            encoder_output = encoder_output[0] # take cls output only
+            
+            latent_info = self.latent_proj(encoder_output) # 映射到 (hidden_dim, self.latent_dim*2)
+            mu = latent_info[:, :self.latent_dim] # mu取前面latent_dim
+            logvar = latent_info[:, self.latent_dim:] # logvar取后面latent_dim
+            latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
+            latent_input = self.latent_out_proj(latent_sample)
+            
+        else: # 使用风格变量 Z 用 encoder 编码之后输出
+            if is_training:
+                # project action sequence to embedding dim, and concat with a CLS token
+                action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim), (8,10) x (8, 10, 512) 
+                qpos_embed = self.encoder_qpos_proj(qpos)  # (bs, hidden_dim), (8, 512)
+                qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim), (8, 1, 512)
+                
+                gpos_embed = self.encoder_gpos_proj(gpos)  # (bs, hidden_dim)
+                gpos_embed = torch.unsqueeze(gpos_embed, axis=1)  # (bs, 1, hidden_dim)
+                
+                cls_embed = self.cls_embed.weight # (1, hidden_dim)
+                cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
+                
+                encoder_input = torch.cat([cls_embed, qpos_embed, gpos_embed, action_embed], axis=1) # (bs, seq+3, hidden_dim), (8, 13, 512)
+                encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
+                
+                # do not mask cls token
+                cls_joint_is_pad = torch.full((bs, 3), False).to(qpos.device) # False: not a padding, (8,2) 2->3 (8, 3)
+                is_pad_action = torch.cat([cls_joint_is_pad, is_pad_action], axis=1)  # (bs, seq+1), (8, 12) -> (8, 13)
+                # 其实transformer还是固定长度输入，只是使用了cls填充了不是固定长度的值
+                
+                # obtain position embedding
+                pos_embed = self.pos_table.clone().detach()
+                pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
+                
+                # query model
+                encoder_output = self.encoder(encoder_input, pos=pos_embed, src_key_padding_mask=is_pad_action)
+                encoder_output = encoder_output[0] # take cls output only
+                
+                latent_info = self.latent_proj(encoder_output)
+                mu = latent_info[:, :self.latent_dim] # mu 是做隐层的映射，用来干什么了？
+                logvar = latent_info[:, self.latent_dim:] # logvar是隐层的另一个维度的映射提取
+                latent_sample = reparametrize(mu, logvar) # mu和logvar都在这里用了
+                latent_input = self.latent_out_proj(latent_sample)
+                
+                # # 测试一下没有风格变量Z，几乎没有影响，那我直接把历史图像全部压缩进去怎么样
+                mu = logvar = None
+                latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
+                latent_input = self.latent_out_proj(latent_sample)
+                
+            else: # 验证的时候没用Z吗？ 对，Z=0向量
+                mu = logvar = None
+                latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
+                latent_input = self.latent_out_proj(latent_sample)
+
 
         if self.backbones is not None: # 用骨干网络做图像预处理
             # Image observation features and position embeddings
             all_cam_features = []
             all_cam_pos = []
             for cam_id, cam_name in enumerate(self.camera_names):
-            ##############################################################################
-            # features, pos = self.backbones[0](image[:, cam_id]) # HARDCODED
                 if self.use_film:
                     features, pos = self.backbones[cam_id](image[:, cam_id], command_embedding) # add command_embedding
                 else:
-                    features, pos = self.backbones[cam_id](image[:, cam_id])
-            ##############################################################################
+                    features, pos = self.backbones[cam_id](image[:, cam_id]) # image[:,id]前面的冒号就是表示的batch_size
             
-                features = features[0] # take the last layer feature
-                pos = pos[0]
-                all_cam_features.append(self.input_proj(features))
+                features = features[0] # take the last layer feature # (bs,1536,4,5)
+                pos = pos[0] # (1,1536,4,5)
+                
+                all_cam_features.append(self.input_proj(features)) # (bs,1536,4,5) x (1536, 512) = (1,512,4,5),(4,5)是卷积核？
                 all_cam_pos.append(pos)
                 
             # proprioception features
             proprio_input_qpos = self.input_proj_robot_state_qpos(qpos)
-            
-            ################
-            
             proprio_input_gpos = self.input_proj_robot_state_gpos(gpos)# 将gpos单独编码了
             
             # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
             
-            ##############################################################################
-            # 其中transformer的输入分别是：图像特征、图像特征位置编码、风格变量Z、joints映射后的，以及position embeddings (fixed)，权重丢进去，在训练的时候训练好的？？
-            # hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
             # Only append the command embedding if we are using one-hot
             command_embedding_to_append = (command_embedding_proj if self.use_language else None)
+            hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, 
+                                  proprio_input_qpos, proprio_input_gpos, 
+                                  self.additional_pos_embed.weight, 
+                                  command_embedding=command_embedding_to_append)[0]
             
-            hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input_qpos, proprio_input_gpos, self.additional_pos_embed.weight, command_embedding=command_embedding_to_append)[0]
-            ##############################################################################
-            
-        else:
+            image_feature = None
+            if not is_training:
+               image_feature = src.flatten(2) # (1, 512, 4, 5) -> 4x5=20 (1, 512, 20)
+               image_feature = torch.mean(image_feature, dim=2).unsqueeze(1)# (1, 512, 20) -> (1, 512)
+               image_pos = pos.flatten(2)# (1, 512, 4, 5) -> 4x5=20 (1, 512, 20)
+               image_pos = torch.mean(image_pos, dim=2).unsqueeze(1)# (1, 512, 20) -> (1, 512)，但是每一个 image_pos不一样吧
+               
+               image_feature = image_feature.cpu()
+               image_pos = image_pos.cpu()
+               encode_history_image_pos = [image_feature, image_pos]
+               
+        else: # 不使用backbone
             qpos = self.input_proj_robot_state_qpos(qpos)
             gpos = self.input_proj_robot_state_gpos(gpos)
             env_state = self.input_proj_env_state(env_state)
@@ -248,7 +303,10 @@ class DETRVAE(nn.Module):
             
         a_hat = self.action_head(hs)
         is_pad_hat = self.is_pad_head(hs)
-        return a_hat, is_pad_hat, [mu, logvar]
+        if is_training:
+            return a_hat, is_pad_hat, [mu, logvar]
+        else:
+            return a_hat, is_pad_hat, [mu, logvar], encode_history_image_pos
 
 class CNNMLP(nn.Module):
     def __init__(self, backbones, state_dim, camera_names):
