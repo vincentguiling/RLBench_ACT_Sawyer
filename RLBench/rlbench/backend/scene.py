@@ -420,7 +420,7 @@ class Scene(object):
                 print(f"point {i} has reached with {self._lens_episode_count} steps, success = {success}, done = {done}") # success is for task not for waypoint, maybe the done is for waypoint 
                 
                 point.end_of_path()
-                path.clear_visualization()
+                path.clear_visualization() ###########################
                     
                 if len(ext) > 0:
                     contains_param = False

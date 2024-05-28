@@ -1,3 +1,6 @@
+# git需要更新秘钥时：
+git config --global --replace-all user.password "要修改的密码"
+
 # 与ROS环境分开，需要：
 source ~/.bashrc
 conda activate xj_rlbench
@@ -8,7 +11,7 @@ export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
 bash /home/boxjod/Gym/RLBench/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04/coppeliaSim.sh  
 
 # 创建和修改测试任务
-python3 RLBench/tools/task_builder_sawyer.py --task sorting_program5
+python3 RLBench/tools/task_builder_sawyer.py --task sorting_program21
 
 # 演示数据集生成    
 python3 RLBench/tools/dataset_generator_sawyer_act3.py \
@@ -24,7 +27,7 @@ python3 RLBench/tools/dataset_generator_sawyer_act3.py \
     --episodes_per_task 50 
 
 # 数据集可视化
-python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program22/variation0 --episode_idx 99
+python3 act2/visualize_episodes.py --dataset_dir Datasets/sorting_program5/variation0 --episode_idx 1
 
 # 修改数据集
 python3 act2/mod_datasets.py
@@ -43,7 +46,7 @@ python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \
     --ckpt_dir Trainings \
     --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 3000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
+    --num_epochs 1000  --lr 1e-5 --seed 0 --backbone efficientnet_b0 \
     ; \
 python act2/imitate_episodes_sawyer4.py \
     --task_name sorting_program21 \

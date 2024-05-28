@@ -144,8 +144,13 @@ class DETRVAE(nn.Module):
                     history_all_cam_src = []
                     history_all_cam_pos = []
                     for cam_id, cam_name in enumerate(self.camera_names): # 0 ‘wrist’
+                        # features, pos = self.backbones[cam_id](history_images[:, cam_id]) # [batch_size * history_idx, , cam_id, chanel, width, height]
                         
-                        features, pos = self.backbones[cam_id](history_images[:, cam_id]) # [batch_size * history_idx, , cam_id, chanel, width, height]
+                        if self.use_film:
+                            features, pos = self.backbones[cam_id](history_images[:, cam_id], command_embedding) # add command_embedding
+                        else:
+                            features, pos = self.backbones[cam_id](history_images[:, cam_id]) # image[:,id]前面的冒号就是表示的batch_size
+                        
                         features = features[0] # take the last layer feature [80, 1536, 4, 5]
                         pos = pos[0] # take the last layer pos [10, 512, 4, 5]
                         
