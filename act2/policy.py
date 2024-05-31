@@ -9,6 +9,12 @@ from detr.main import build_ACT_model_and_optimizer, build_CNNMLP_model_and_opti
 import IPython
 e = IPython.embed
 
+# from utils import get_gpu_mem_info
+
+# def print_gpu_mem():
+#     gpu_mem_total, gpu_mem_used, gpu_mem_free = get_gpu_mem_info()
+#     return (gpu_mem_used/gpu_mem_total)*100
+
 class ACTPolicy(nn.Module):
     def __init__(self, args_override):
         super().__init__()
@@ -31,14 +37,19 @@ class ACTPolicy(nn.Module):
             actions = actions[:, :self.model.num_queries] # 如果输入的actions queries没有10个怎么办[有pad补充了]
             is_pad_action = is_pad_action[:, :self.model.num_queries]
             
+            # print("模型计算之前 ：", print_gpu_mem())
+            
             a_hat, is_pad_hat, (mu, logvar) = self.model(qpos, gpos, image, env_state, history_images,
                                                          history_action, is_pad_history=is_pad_history, 
                                                          actions=actions, is_pad_action=is_pad_action, 
                                                          command_embedding=command_embedding) ############################################
+            # print("模型计算之后 ：", print_gpu_mem())
             total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
             loss_dict = dict()
             all_l1 = F.l1_loss(actions, a_hat, reduction='none')
             l1 = (all_l1 * ~is_pad_action.unsqueeze(-1)).mean()
+            
+            # print("损失计算 ：", print_gpu_mem())
             
             loss_dict['l1'] = l1
             loss_dict['kl'] = total_kld[0]

@@ -98,10 +98,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
             
             if len(self.command_list) > 0 or self.use_language:
                 # Sample within the segment boundaries
-                start_ts = np.random.randint(segment_start, segment_end) # 每个指令有固定的步数？
+                start_ts = np.random.randint(segment_start, segment_end) # 每个指令有固定的步数
                 end_ts = min(segment_end, start_ts + max_len - 2)
             else:
-                start_ts = np.random.choice(original_action_shape[0])
+                start_ts = np.random.choice(original_action_shape[0]) ######################### (30) #
                 end_ts = original_action_shape[0] - 1
                 
             # episode_len = original_action_shape[0] # episode_len 不是固定了的，用end_ts代替episode_len
@@ -137,27 +137,75 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 action = root['/action'][start_ts : start_ts + self.num_queries]
             action_len = min(action_len, self.num_queries)    
             
-            # else:
+            # else: # 其实不需要固定最大长度帧的
             #     action = root['/action'][max(0, start_ts - 1) : end_ts + 1] # hack, to make timesteps more aligned
             #     action_len = end_ts - max(0, start_ts - 1) + 1 # hack, to make timesteps more aligned
             
             # 加入历史图像和历史action
             history_images = []
             history_image_dict = dict()
-            history_action_len = start_ts + 1
-            if history_action_len <= self.num_queries:
-                history_action = root['/action'][0 : start_ts + 1]
-                for history_idx in range(start_ts + 1):
-                    for cam_name in self.camera_names:
-                        history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
-                    history_images.append(history_image_dict.copy())
-            else:
-                history_action = root['/action'][start_ts - self.num_queries : start_ts]
-                for history_idx in range(start_ts - self.num_queries, start_ts + 1):
-                    for cam_name in self.camera_names:
-                        history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
-                    history_images.append(history_image_dict.copy())
-            history_action_len = min(history_action_len, self.num_queries)
+
+            if 'sorting_program5' in self.dataset_dir:# 用夹爪状态分割历史
+                qpos_his = root['/observations/qpos'][0:start_ts + 1] # 只需要检测之前状态的改变
+                qpos_his_len = len(qpos_his) # 它会等于0
+
+                gripper_state = qpos_his[qpos_his_len-1][7] # 读取了最后的状态
+                gripper_change_point = []
+
+                for idx in range(qpos_his_len-1, -1, -1): # 倒着来检测夹爪状态变化
+                    if gripper_state != qpos_his[idx][7]:
+                        gripper_state = qpos_his[idx][7]
+                        gripper_change_point.append(idx+1)
+                        break
+                gripper_change_point.append(0)
+                # print(f"#####\n当前start_ts = {start_ts}, history_len = {qpos_his_len}, now_state = {gripper_state}, history_change = {gripper_change_point}")
+                
+                change_point = gripper_change_point[0] # 向前推最近的一个夹爪改变点
+                history_action_len = start_ts - change_point + 1 # 如果是20-10 = 10，如果是10，那么+1 =11个动作历史因为有0 
+                # print(f"now_frame = {start_ts}, last_point = {change_point}, history_action_len = {history_action_len}")
+                # now_frame = 34, last_point = 31, history_action_len = 4 这种状态下就可以产生pad的开启新现阶段的效果
+                
+                if start_ts<=(change_point+self.num_queries): 
+                    
+                    history_action = root['/action'][change_point : start_ts + 1]
+                    for history_idx in range(change_point, start_ts + 1):
+                        for cam_name in self.camera_names:
+                            history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
+                        history_images.append(history_image_dict.copy())
+                
+                else: # 距离上一个夹爪分界点，之间的历史长度大于chunking数量，那就取前面这么chunking个
+                    history_action = root['/action'][start_ts - self.num_queries : start_ts]
+                    for history_idx in range(start_ts - self.num_queries, start_ts + 1):
+                        for cam_name in self.camera_names:
+                            history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
+                        history_images.append(history_image_dict.copy())
+                history_action_len = min(history_action_len, self.num_queries)
+                
+                # 更新diff
+                qpos = root['/observations/qpos'][start_ts]
+                qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][change_point])]
+                qpos = np.append(qpos, qpos_diff[:7])
+                
+                gpos = root['/observations/gpos'][start_ts]
+                gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][change_point])]
+                gpos = np.append(gpos, gpos_diff[:7])
+                         
+            else: # 不需要分段任务
+                history_action_len = start_ts + 1
+                if history_action_len <= self.num_queries: # 存在的历史长度小于chunking数量
+                    history_action = root['/action'][0 : start_ts + 1]
+                    for history_idx in range(start_ts + 1):
+                        for cam_name in self.camera_names:
+                            history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
+                        history_images.append(history_image_dict.copy())
+                else:
+                    history_action = root['/action'][start_ts - self.num_queries : start_ts]
+                    for history_idx in range(start_ts - self.num_queries, start_ts + 1): # 存在的历史长度大于chunking数量，但是也只读这么多个，为了节省空间
+                        for cam_name in self.camera_names:
+                            history_image_dict[cam_name] = root[f'/observations/images/{cam_name}'][history_idx]
+                        history_images.append(history_image_dict.copy())
+                history_action_len = min(history_action_len, self.num_queries)
+            
             
         padded_action = np.zeros((self.num_queries,) + original_action_shape[1:], dtype=np.float32) 
         # 随机抽样的结果当中只剩余17步了之后，也会推广到32，方便后面做action chunking 的截取，也就是说最大的quary就是max_len
@@ -198,7 +246,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             
         original_images_shape = np.shape(history_all_cam_images)
         padded_history_images = np.zeros((self.num_queries,) + original_images_shape[1:], dtype=np.float32)
-        history_all_cam_images = history_all_cam_images[::-1] # 以第一个维度倒序
+        history_all_cam_images = history_all_cam_images[::-1] # 以第一个维度倒序, 翻转图像
         padded_history_images[:history_action_len] = history_all_cam_images[:history_action_len] # 往前面添加 padded_history_images
         
         history_all_cam_images = np.array(padded_history_images)
@@ -230,7 +278,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
             return image_data, qpos_data, gpos_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding
         else:
             return image_data, qpos_data, gpos_data, history_images_data,  history_action_data, is_pad_history, action_data, is_pad_action
-
 
 def get_norm_stats(dataset_dir, num_episodes):
     all_qpos_data = []
@@ -373,3 +420,34 @@ class HParams:
 
     def __repr__(self):
         return self.__dict__.__repr__()
+
+
+def get_gpu_mem_info(gpu_id=0):
+    """
+    根据显卡 id 获取显存使用信息, 单位 MB
+    :param gpu_id: 显卡 ID
+    :return: total 所有的显存，used 当前使用的显存, free 可使用的显存
+    """
+    import pynvml
+    pynvml.nvmlInit()
+    if gpu_id < 0 or gpu_id >= pynvml.nvmlDeviceGetCount():
+        print(r'gpu_id {} 对应的显卡不存在!'.format(gpu_id))
+        return 0, 0, 0
+
+    handler = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
+    meminfo = pynvml.nvmlDeviceGetMemoryInfo(handler)
+    total = round(meminfo.total / 1024 / 1024, 2)
+    used = round(meminfo.used / 1024 / 1024, 2)
+    free = round(meminfo.free / 1024 / 1024, 2)
+    return total, used, free
+
+def get_cpu_mem_info():
+    import psutil
+    """
+    获取当前机器的内存信息, 单位 MB
+    :return: mem_total 当前机器所有的内存 mem_free 当前机器可用的内存 mem_process_used 当前进程使用的内存
+    """
+    mem_total = round(psutil.virtual_memory().total / 1024 / 1024, 2)
+    mem_free = round(psutil.virtual_memory().available / 1024 / 1024, 2)
+    mem_process_used = round(psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024, 2)
+    return mem_total, mem_free, mem_process_used

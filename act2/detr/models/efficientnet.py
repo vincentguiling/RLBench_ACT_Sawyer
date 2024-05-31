@@ -55,7 +55,11 @@ class FiLMBlock(nn.Module):
         # gamma shape: (batch_size, C)
         # beta shape: (batch_size, C)
         gamma = self.scale(language_embed)
+        # print(f"{language_embed.shape=}")
+        # print(f"{gamma.shape=}")
         beta = self.shift(language_embed)
+        # print(f"{beta.shape=}")
+        
         # Instead of x = x * gamma + beta, we do x = x * (1 + gamma) + beta because if gamma is initially zero-centered,
         # then the former would zero-out the CNN feature map activations and thus gradients.
         # On the other hand, the latter formulation makes the transformation close to identity.

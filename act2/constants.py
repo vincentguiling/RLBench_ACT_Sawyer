@@ -16,7 +16,7 @@ SIM_TASK_CONFIGS = {
         # 'dataset_dir': DATA_DIR + '/sorting_program21/variation123',# 红色、蓝色和绿色3个颜色
         'episode_len': 32,
         'num_episodes': 50,
-        'num_variation': 1,
+        'num_variation': 1, # 这个问题，他应该是0？
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
     # 'sorting_program211':{ # 测试不同初始位置的额效果

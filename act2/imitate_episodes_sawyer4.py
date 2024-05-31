@@ -213,7 +213,7 @@ def generate_command_embedding(command, t, language_encoder, tokenizer, model, i
     
     
 def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation=0):
-    seed = 60
+    seed = 10
     set_seed(seed)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
@@ -269,6 +269,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         
     ##########################################################################################################
     max_timesteps = int(max_timesteps * 1.2) # may increase for real-world tasks
+    # max_timesteps = 45
     ##########################################################################################################
     
     num_rollouts = num_verification # 验证 50 次
@@ -296,6 +297,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         gpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+        
         image_list = [] # for visualization
         qpos_list = []
         gpos_list = []
@@ -430,6 +432,12 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                             # while done != True:
                             done = env._robot.gripper.actuate(0, 1.0)
                                 # env._scene.step() # Scene 步进
+                            
+                            # 清空历史信息
+                            # history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
+                            # history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
+                            # qpos_initial = obs.joint_positions
+                            # gpos_initial = obs.gripper_pose
 
                         elif gripper_state > 0.5 and gripper_flag == 2 :# 适合步骤1 夹取
                             print(timestep, ": open_gripper: ", gripper_state)
@@ -437,6 +445,13 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                             while done != True:
                                 done = env._robot.gripper.actuate(1, 0.4)
                                 env._scene.step() # Scene 步进
+                                
+                            # 清空历史信息
+                            # history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
+                            # history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
+                            # qpos_initial = obs.joint_positions
+                            # gpos_initial = obs.gripper_pose
+                            
                     else:
                         if gripper_state < 0.90 and gripper_flag < 2 : # 适合步骤1 夹取
                             print(timestep,": close_gripper: ", gripper_state)
@@ -539,8 +554,16 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
 
     return success_rate, avg_return
 
+# from utils import get_gpu_mem_info
+
+# def print_gpu_mem():
+#     gpu_mem_total, gpu_mem_used, gpu_mem_free = get_gpu_mem_info()
+#     return (gpu_mem_used/gpu_mem_total)*100
 
 def forward_pass(data, policy):
+    
+    # print("########\n前向传播：", print_gpu_mem())
+    
     if len(data) == 9:  # use_language
         image_data, qpos_data, gpos_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding = data
         command_embedding = command_embedding.cuda()
@@ -568,6 +591,8 @@ def train_bc(train_dataloader, val_dataloader, config):
     policy = make_policy(policy_class, policy_config)
     policy.cuda()
     optimizer = make_optimizer(policy_class, policy)
+    
+    # print("创建模型：", print_gpu_mem())
     
     # 加载已有的权重
     start_epoch = 0
@@ -598,11 +623,13 @@ def train_bc(train_dataloader, val_dataloader, config):
         # 2.1 validation and summary the last epoch：验证出 best policy
         with torch.inference_mode():
             policy.eval() # 将 policy 配置为 eval 模式
+            # print("########\n模型验证 ：", print_gpu_mem())
             epoch_dicts = []
             
             # 将验证集的数据都跑一下
             for batch_idx, data in enumerate(val_dataloader):
                 forward_dict = forward_pass(data, policy) # 前向传播！！
+                # return
                 # 为什么验证的时候要做前向传播呢？？  ===》在policy在eval模式下，权重不会做更新，在eval的时候做前向传播是为了计算loss
                 epoch_dicts.append(forward_dict)
                 
@@ -622,11 +649,13 @@ def train_bc(train_dataloader, val_dataloader, config):
         
         # 2.2. training epoch 训练只出 last policy
         policy.train() # 将policy配置为 train 模式（可以更新其中的参数）
+        # print("########\n模型训练 ：", print_gpu_mem())
         optimizer.zero_grad() # 重置优化器梯度参数
+        # print("加载优化器 ：", print_gpu_mem())
         
         for batch_idx, data in enumerate(train_dataloader): # 迭代循环训练集
             forward_dict = forward_pass(data, policy) # 前向传播！！
-            
+            # return
             # backward
             loss = forward_dict['loss'] # 没有用训练的loss，而是用eval的loss做输出
             loss.backward() # 损失反向传播

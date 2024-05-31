@@ -64,11 +64,12 @@ class Transformer(nn.Module):
             
             if command_embedding is not None:
                 addition_input = torch.stack(
-                    [latent_input, proprio_input_qpos, command_embedding], axis=0
+                    [latent_input, proprio_input_qpos, proprio_input_gpos, command_embedding], axis=0
                 )
             else:
+                # Transformer不要conmand_embedding的输入
                 addition_input = torch.stack([latent_input, proprio_input_qpos, proprio_input_gpos], axis=0) # 把所有东西都加入src了
-                
+
             src = torch.cat([addition_input, src], axis=0)
         else:
             assert len(src.shape) == 3
@@ -179,7 +180,6 @@ class TransformerEncoderLayer(nn.Module):
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
         q = k = self.with_pos_embed(src, pos)
-        # print(src_key_padding_mask.shape)
         
         src2 = self.self_attn(q, k, value=src, attn_mask=src_mask,
                               key_padding_mask=src_key_padding_mask)[0]
