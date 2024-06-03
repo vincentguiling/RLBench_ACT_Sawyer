@@ -14,7 +14,8 @@ CROP_TOP = True  # hardcode
 FILTER_MISTAKES = False  # Filter out mistakes from the dataset even if not use_language
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_len=None, num_queries=None, command_list=None, use_language=False, language_encoder=None):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_len=None, num_queries=None, 
+                 command_list=None, use_language=False, language_encoder=None, use_gpos=True, use_diff=True, action_is_qpos=False):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids if len(episode_ids) > 0 else [0] 
         self.dataset_dir = dataset_dir
@@ -29,6 +30,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.use_language = use_language
         self.language_encoder = language_encoder
         self.transformations = None
+        
+        self.use_diff = use_diff
+        self.action_is_qpos = action_is_qpos
 
         self.__getitem__(0) # initialize self.is_sim
 
@@ -113,12 +117,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
             
             # get observation at start_ts only
             qpos = root['/observations/qpos'][start_ts]
-            qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
-            qpos = np.append(qpos, qpos_diff[:7])
-            
             gpos = root['/observations/gpos'][start_ts]
-            gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][0])]
-            gpos = np.append(gpos, gpos_diff[:7])
+            if self.use_diff:
+                qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
+                qpos = np.append(qpos, qpos_diff[:7])
+                gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][0])]
+                gpos = np.append(gpos, gpos_diff[:7])
             
             # gpos = gpos[:7] # 兼顾实物机器人和仿真机器人
             # gpos =  np.append(gpos,qpos[7])
@@ -129,14 +133,23 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
                 
             # get all actions after and including start_ts
-            # if is_sim:
+    
             action_len = end_ts - start_ts + 1 
             if action_len <= self.num_queries:
-                action = root['/action'][start_ts : end_ts + 1]
+
+                if self.action_is_qpos:
+                    action = root['/action_qpos'][start_ts : end_ts + 1]
+                else:
+                    action = root['/action'][start_ts : end_ts + 1]
+                    
             else:
-                action = root['/action'][start_ts : start_ts + self.num_queries]
+                if self.action_is_qpos:
+                    action = root['/action_qpos'][start_ts : start_ts + self.num_queries]
+                else:
+                    action = root['/action'][start_ts : start_ts + self.num_queries]
             action_len = min(action_len, self.num_queries)    
             
+            # if is_sim:
             # else: # 其实不需要固定最大长度帧的
             #     action = root['/action'][max(0, start_ts - 1) : end_ts + 1] # hack, to make timesteps more aligned
             #     action_len = end_ts - max(0, start_ts - 1) + 1 # hack, to make timesteps more aligned
@@ -182,13 +195,14 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 history_action_len = min(history_action_len, self.num_queries)
                 
                 # 更新diff
-                qpos = root['/observations/qpos'][start_ts]
-                qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][change_point])]
-                qpos = np.append(qpos, qpos_diff[:7])
-                
-                gpos = root['/observations/gpos'][start_ts]
-                gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][change_point])]
-                gpos = np.append(gpos, gpos_diff[:7])
+                if self.use_diff:
+                    qpos = root['/observations/qpos'][start_ts]
+                    qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][change_point])]
+                    qpos = np.append(qpos, qpos_diff[:7])
+                    
+                    gpos = root['/observations/gpos'][start_ts]
+                    gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][change_point])]
+                    gpos = np.append(gpos, gpos_diff[:7])
                          
             else: # 不需要分段任务
                 history_action_len = start_ts + 1
@@ -279,7 +293,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         else:
             return image_data, qpos_data, gpos_data, history_images_data,  history_action_data, is_pad_history, action_data, is_pad_action
 
-def get_norm_stats(dataset_dir, num_episodes):
+def get_norm_stats(dataset_dir, num_episodes, use_gpos=True, use_diff=True, action_is_qpos=False):
     all_qpos_data = []
     all_gpos_data = []
     all_action_data = []
@@ -288,15 +302,16 @@ def get_norm_stats(dataset_dir, num_episodes):
         with h5py.File(dataset_path, 'r') as root:
             qpos = root['/observations/qpos'][()]
             gpos = root['/observations/gpos'][()]
-            action = root['/action'][()]
-            
-        qpos_diff = [a-b for a,b in zip(qpos, qpos[0])]
-        qpos = np.append(qpos, qpos_diff[:7])
+            if action_is_qpos:
+                action = root['/action_qpos'][()]
+            else:
+                action = root['/action'][()]
         
-        gpos_diff = [a-b for a,b in zip(gpos, gpos[0])]
-        gpos = np.append(gpos, gpos_diff[:7])
-        # gpos = gpos[:7]
-        # qpos = np.append(qpos,gpos)
+        if use_diff:
+            qpos_diff = [a-b for a,b in zip(qpos, qpos[0])]
+            qpos = np.append(qpos, qpos_diff[:7])
+            gpos_diff = [a-b for a,b in zip(gpos, gpos[0])]
+            gpos = np.append(gpos, gpos_diff[:7])
         
         all_qpos_data.append(torch.from_numpy(qpos))
         all_gpos_data.append(torch.from_numpy(gpos))
@@ -334,7 +349,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, max_len=None, num_queries=None, command_list=None, use_language=False, language_encoder=None):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, max_len=None, num_queries=None, command_list=None, use_language=False, language_encoder=None, use_gpos=True, use_diff=True, action_is_qpos=False):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -343,11 +358,11 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     val_indices = shuffled_indices[int(train_ratio * num_episodes):]
     
     # obtain normalization stats for qpos and action
-    norm_stats = get_norm_stats(dataset_dir, num_episodes)
+    norm_stats = get_norm_stats(dataset_dir, num_episodes,use_gpos=use_gpos, use_diff=use_diff, action_is_qpos=action_is_qpos)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder,use_gpos=use_gpos, use_diff=use_diff, action_is_qpos=action_is_qpos)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder, use_gpos=use_gpos, use_diff=use_diff, action_is_qpos=action_is_qpos)
     
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
@@ -375,7 +390,6 @@ def detach_dict(d):
 def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
-    ################################################
     random.seed(seed)
     if torch.backends.cudnn.enabled:
         torch.cuda.manual_seed(seed)
@@ -386,8 +400,6 @@ def number_to_one_hot(number, size=501):
     one_hot_array = np.zeros(size)
     one_hot_array[number] = 1
     return one_hot_array
-
-    ################################################
 
 # audio2text parrot
 class HParams:

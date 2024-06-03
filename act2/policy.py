@@ -37,23 +37,22 @@ class ACTPolicy(nn.Module):
             actions = actions[:, :self.model.num_queries] # 如果输入的actions queries没有10个怎么办[有pad补充了]
             is_pad_action = is_pad_action[:, :self.model.num_queries]
             
-            # print("模型计算之前 ：", print_gpu_mem())
-            
             a_hat, is_pad_hat, (mu, logvar) = self.model(qpos, gpos, image, env_state, history_images,
                                                          history_action, is_pad_history=is_pad_history, 
                                                          actions=actions, is_pad_action=is_pad_action, 
-                                                         command_embedding=command_embedding) ############################################
-            # print("模型计算之后 ：", print_gpu_mem())
-            total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+                                                         command_embedding=command_embedding) 
+                
             loss_dict = dict()
             all_l1 = F.l1_loss(actions, a_hat, reduction='none')
             l1 = (all_l1 * ~is_pad_action.unsqueeze(-1)).mean()
-            
-            # print("损失计算 ：", print_gpu_mem())
-            
             loss_dict['l1'] = l1
-            loss_dict['kl'] = total_kld[0]
-            loss_dict['loss'] = loss_dict['l1'] + loss_dict['kl'] * self.kl_weight #   * self.kl_weight 
+
+            if mu != None:
+                total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar) # 如果没有编码器，注释掉
+                loss_dict['kl'] = total_kld[0] # 如果没有编码器，注释掉
+                loss_dict['loss'] = loss_dict['l1'] + loss_dict['kl'] * self.kl_weight #   * self.kl_weight 
+            else:
+                loss_dict['loss'] = loss_dict['l1']
             
             return loss_dict
         else: # inference time
@@ -64,7 +63,7 @@ class ACTPolicy(nn.Module):
             a_hat, _, (_, _) , image_feature = self.model(qpos, gpos, image, env_state, history_images, 
                                           history_action, is_pad_history=is_pad_history, 
                                           actions=None, is_pad_action=is_pad_action, 
-                                          command_embedding=command_embedding) # no action, sample from prior  ############################################
+                                          command_embedding=command_embedding) # no action, sample from prior  
             return a_hat, image_feature
 
     def configure_optimizers(self):

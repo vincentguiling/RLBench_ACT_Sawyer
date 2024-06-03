@@ -93,6 +93,7 @@ def check_and_make(dir):
 def save_demo(demo, example_path, ex_idx):
     data_dict = {
         '/action': [], 
+        '/action_qpos': [], 
         '/observations/images/wrist': [],
         '/observations/images/wrist_depth': [],
         '/observations/images/head': [],
@@ -104,6 +105,7 @@ def save_demo(demo, example_path, ex_idx):
     for i, obs in enumerate(demo): 
         if i != 0: # action是下一步的姿态 # 是 gpos的运动去向(xyz的变化)
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
+            data_dict['/action_qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
             # diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1]))*10 #* 100)//100 # 减去上一时刻的gpos
             # data_dict['/action'].append(np.append(diff_gpos, obs.gripper_open))
            
@@ -122,12 +124,14 @@ def save_demo(demo, example_path, ex_idx):
         
     # diff_gpos = ((obs.gripper_pose -  data_dict['/observations/gpos'][i-1]))*10 # * 100)//100 # 减去上一时刻的gpos
     data_dict['/action'].append(np.append(obs.gripper_pose,obs.gripper_open))
+    data_dict['/action_qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
     dataset_path = os.path.join(example_path, f'episode_{ex_idx}') # save path
     check_and_make(example_path)
     
     with h5py.File(dataset_path + '.hdf5', 'w', rdcc_nbytes=1024 ** 2 * 2) as root: 
         root.attrs['sim'] = True # 根目录 
         action = root.create_dataset('action', (max_timesteps, 8))
+        action_qpos = root.create_dataset('action_qpos', (max_timesteps, 8))
         obs = root.create_group('observations')
         image = obs.create_group('images')
         image.create_dataset('wrist', (max_timesteps, 120, 160, 3), dtype='uint8',chunks=(1, 120, 160, 3), ) 
@@ -163,18 +167,17 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL
     elif FLAGS.renderer == 'opengl3':
         obs_config.wrist_camera.render_mode = RenderMode.OPENGL3
-    
+
+    ##############################################################################################################
     headless_val = True
     if socket.gethostname() != 'XJ':
         headless_val = True
     
-    ##############################################################################################################
     rlbench_env = Environment( # 训练数据生成是使用的构建的场景
         action_mode=MoveArmThenGripper(JointVelocity(), Discrete()),
         obs_config=obs_config,
         headless=headless_val,
         robot_setup='sawyer')
-    ##############################################################################################################
     
     rlbench_env.launch()
     task_env = None

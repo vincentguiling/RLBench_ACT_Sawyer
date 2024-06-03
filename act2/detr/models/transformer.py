@@ -62,13 +62,14 @@ class Transformer(nn.Module):
             additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim 
             pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0) # (20, 8, 512) -> (23, 8, 512)
             
-            if command_embedding is not None:
-                addition_input = torch.stack(
-                    [latent_input, proprio_input_qpos, proprio_input_gpos, command_embedding], axis=0
-                )
+            if (command_embedding is not None) and (proprio_input_gpos is not None):
+                addition_input = torch.stack([latent_input, proprio_input_qpos, proprio_input_gpos, command_embedding], axis=0) # pos_embed_dim = 4
+            elif proprio_input_gpos is not None:
+                addition_input = torch.stack([latent_input, proprio_input_qpos, proprio_input_gpos], axis=0) # pos_embed_dim = 3
+            elif command_embedding is not None:
+                addition_input = torch.stack([latent_input, proprio_input_qpos, command_embedding], axis=0) # pos_embed_dim = 3
             else:
-                # Transformer不要conmand_embedding的输入
-                addition_input = torch.stack([latent_input, proprio_input_qpos, proprio_input_gpos], axis=0) # 把所有东西都加入src了
+                addition_input = torch.stack([latent_input, proprio_input_qpos], axis=0) # pos_embed_dim = 2
 
             src = torch.cat([addition_input, src], axis=0)
         else:

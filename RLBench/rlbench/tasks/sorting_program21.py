@@ -40,7 +40,6 @@ class SortingProgram21(Task):
 
     def init_episode(self, index: int) -> List[str]: 
         # # index来自variation
-        print(f"{index=}")
         color_name, color_rgb = colors[index]  # 哦哦是训练和演示用的不一样？？？
         # # 产生2个在index 前面和后面的 随机数（不跟index相同）
         # color_choices = np.random.choice(list(range(index)) 
