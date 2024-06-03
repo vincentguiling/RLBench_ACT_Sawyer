@@ -42,16 +42,16 @@ class SortingProgram21(Task):
         # # index来自variation
         color_name, color_rgb = colors[index]  # 哦哦是训练和演示用的不一样？？？
         # # 产生2个在index 前面和后面的 随机数（不跟index相同）
-        # color_choices = np.random.choice(list(range(index)) 
-        # + list(range(index +1, len(colors))),size=2,replace=False)# 是因为这个改了吗？之前是True
+        color_choices = np.random.choice(list(range(index)) 
+        + list(range(index +1, len(colors))),size=2,replace=False)# 是因为这个改了吗？之前是True
         
-        # for ob, i in zip([self.distractor_block0, self.distractor_block1],
-        #                  color_choices):
-        #     ob.set_color(colors[i][1])
-        # self.target_container1.set_color(colors[i][1]) # 如果不开这段代码，盒子颜色只有蓝色和绿色
+        for ob, i in zip([self.distractor_block0, self.distractor_block1],
+                         color_choices):
+            ob.set_color(colors[i][1])
+        self.target_container1.set_color(colors[i][1]) # 如果不开这段代码，盒子颜色只有蓝色和绿色
             
-        # self.target_block.set_color(color_rgb)
-        # self.target_container0.set_color(color_rgb) # 为什么没有执行每次都有一个红色的呢？，反而是每次都有一个蓝色
+        self.target_block.set_color(color_rgb)
+        self.target_container0.set_color(color_rgb) # 为什么没有执行每次都有一个红色的呢？，反而是每次都有一个蓝色
         
         
         boundary_spawn = SpawnBoundary([self.boundary])
