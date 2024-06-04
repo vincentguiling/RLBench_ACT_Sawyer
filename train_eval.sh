@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # 生成数据集
-# python3 RLBench/tools/dataset_generator_sawyer_act3.py \
-#     --save_path Datasets \
-#     --tasks sorting_program21 \
-#     --variations 1 \
-#     --episodes_per_task 50
+python3 RLBench/tools/dataset_generator_sawyer_act3.py \
+    --save_path Datasets \
+    --tasks sorting_program21 \
+    --variations 1 \
+    --episodes_per_task 50
 
-model_type=(ACT3E3)
-epoch_list=(2000 3000 4000 5000 6000 7000)
+model_type=(ACT0E0 ACT3E0 ACT3E2 ACT3E3)
+epoch_list=(1000 2000 3000 4000 5000 6000 7000)
 backbone_list=("efficientnet_b0")
 chunk_size=(20)
 for model in ${model_type[@]}
