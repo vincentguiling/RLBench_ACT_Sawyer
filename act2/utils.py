@@ -13,7 +13,7 @@ import cv2 as cv
 CROP_TOP = True  # hardcode
 FILTER_MISTAKES = False  # Filter out mistakes from the dataset even if not use_language
 
-class EpisodicDataset(torch.utils.data.Dataset):
+class  EpisodicDataset(torch.utils.data.Dataset):
     def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, max_len=None, num_queries=None, 
                  command_list=None, use_language=False, language_encoder=None, use_gpos=True, use_diff=True, action_is_qpos=False):
         super(EpisodicDataset).__init__()

@@ -149,7 +149,8 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
     all the episodes_per_task for that variation."""
 
     # Initialise each thread with random seed
-    np.random.seed(100) # 确定生成的演示都是一样的（避免服务器和本机的差距），但是可能一直都不好
+    np.random.seed(10) # 确定生成的演示都是一样的（避免服务器和本机的差距），但是可能一直都不好
+
     num_tasks = len(tasks)
     img_size = list(map(int, FLAGS.image_size))
     obs_config = ObservationConfig()

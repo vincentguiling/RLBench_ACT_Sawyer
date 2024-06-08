@@ -456,20 +456,20 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                         # 夹爪控制###############################################################################################
                         done = False
                         if task_name =="sorting_program5":
-                            if gripper_state < 0.50 and gripper_flag < 2 : # 适合步骤1 夹取
+                            if gripper_state < 0.60 and gripper_flag < 2 : # 适合步骤1 夹取
                                 print(timestep,": close_gripper: ", gripper_state)
-                                gripper_flag = gripper_flag + 1 # 留出一帧错误
+                                gripper_flag = gripper_flag + 2 # 留出一帧错误
                                 # while done != True:
                                 done = env._robot.gripper.actuate(0, 1.0)
                                     # env._scene.step() # Scene 步进
                                 
                                 # 清空历史信息
-                                # history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
-                                # history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
-                                # qpos_initial = obs.joint_positions
-                                # gpos_initial = obs.gripper_pose
+                                history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
+                                history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
+                                qpos_initial = obs.joint_positions
+                                gpos_initial = obs.gripper_pose
 
-                            elif gripper_state > 0.5 and gripper_flag == 2 :# 适合步骤1 夹取
+                            elif gripper_state > 0.6 and gripper_flag == 2 :# 适合步骤1 夹取
                                 print(timestep, ": open_gripper: ", gripper_state)
                                 gripper_flag = gripper_flag + 1
                                 while done != True:
@@ -477,10 +477,10 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                                     env._scene.step() # Scene 步进
                                     
                                 # 清空历史信息
-                                # history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
-                                # history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
-                                # qpos_initial = obs.joint_positions
-                                # gpos_initial = obs.gripper_pose
+                                history_action = np.zeros((num_queries,) + (action_dim,), dtype=np.float32)
+                                history_image_feature = np.zeros((2,num_queries,) + (hidden_dim,), dtype=np.float32)
+                                qpos_initial = obs.joint_positions
+                                gpos_initial = obs.gripper_pose
                                 
                         else:
                             if gripper_state < 0.90 and gripper_flag < 2 : # 适合步骤1 夹取
