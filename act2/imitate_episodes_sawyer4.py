@@ -41,7 +41,7 @@ e = IPython.embed
 
 def main(args):
     
-    np.set_printoptions(linewidth=200)
+    np.set_printoptions(linewidth=300)
     set_seed(1)
     # command line parameters
     is_eval = args['eval']
@@ -66,14 +66,19 @@ def main(args):
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
     
-    ####################################################################################
     commands = args["command"].split(",") if args["command"] else [] # task_config['commands'] # 
     use_language = args["use_language"]
     language_encoder = args["language_encoder"]
-    ####################################################################################
     
     # max_skill_len = (args["max_skill_len"] if args["max_skill_len"] is not None else episode_len)
     max_skill_len = episode_len
+    
+    
+    ####################
+    # 1.训练和推理文件中，只处理【模型结构的差异】，涉及编码器的都保持一致的输入，在模型实际推理过程中才做筛选： action_is_qpos， use_gpos， state_dim
+    # 2.在数据集读取中会判断，是否使用文本指令（use_language），是否使用位移矢量牵引（gpos_diff）
+    # 3.在模型推理过程中才会考虑使用那个编码器（Z， history_action, history_action_images）
+    ####################
     
     # 初始参数 ACT3
     action_dim = 8 # 输出的姿态 7+1
@@ -208,6 +213,7 @@ def get_image(ts, camera_names): # 推理的时候采用到
     curr_images = []
     
     curr_image = rearrange(ts.wrist_rgb, 'h w c -> c h w')
+    
     curr_images.append(curr_image)    
     # if mamba
     # image_dict[cam_name] = image_dict[cam_name][0:120, 20:140, :] # Slicing to crop the image
@@ -283,6 +289,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
     pre_process_qpos = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     pre_process_gpos = lambda s_gpos: (s_gpos - stats['gpos_mean']) / stats['gpos_std']
     pre_process_action_history = lambda s_action: (s_action - stats['action_mean']) / stats['action_std']
+    
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     
     # load environment
@@ -298,7 +305,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
         num_queries = policy_config['num_queries']
         
     ##########################################################################################################
-    max_timesteps = int(max_timesteps * 1.2) # may increase for real-world tasks
+    max_timesteps = int(max_timesteps * 1.0) # may increase for real-world tasks
     # max_timesteps = 45
     ##########################################################################################################
     
@@ -361,10 +368,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                 if use_diff:
                     qpos_diff = [a - b for a,b in zip(obs.joint_positions, qpos_initial)]
                     qpos_numpy = np.array(np.append(qpos_numpy, qpos_diff)) # 7 + 1 + 7 = 15
+                    # print(f"{qpos_numpy=}")
                     gpos_diff = [a - b for a,b in zip(obs.gripper_pose, gpos_initial)] ########## 卧槽历史遗留问题 joint_positions gripper_pose
                     gpos_numpy = np.array(np.append(gpos_numpy, gpos_diff)) # 7 + 1 + 7 = 15
+                    # print(gpos_numpy)
                 
+                # print(f"{qpos_numpy=}")
                 qpos = pre_process_qpos(qpos_numpy)
+                # print(f"{qpos=}")
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
 
@@ -452,10 +463,10 @@ def eval_bc(config, ckpt_name, save_episode=True, num_verification=50, variation
                         next_gripper_quaternion = action[3:7]
                         path.append(env._robot.arm.get_linear_path(position=next_gripper_position, quaternion=next_gripper_quaternion, steps=10, relative_to=env._robot.arm, ignore_collisions=True))
                         gripper_state = action[7]
-                        
+                        # print(f"{timestep}:{gripper_state=}")
                         # 夹爪控制###############################################################################################
                         done = False
-                        if task_name =="sorting_program5":
+                        if task_name =="sorting_program5" or task_name =="close_jar":
                             if gripper_state < 0.60 and gripper_flag < 2 : # 适合步骤1 夹取
                                 print(timestep,": close_gripper: ", gripper_state)
                                 gripper_flag = gripper_flag + 2 # 留出一帧错误

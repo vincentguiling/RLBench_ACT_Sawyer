@@ -312,7 +312,7 @@ class Scene(object):
             joint_forces=(joint_forces
                           if self._obs_config.joint_forces else None),
             gripper_open=(
-                (1.0 if self.robot.gripper.get_open_amount()[0] > 0.9 else 0.0)
+                (1.0 if self.robot.gripper.get_open_amount()[0] > 0.98 else 0.0)
                 if self._obs_config.gripper_open else None),
                 
             ######################################################################################################
@@ -394,7 +394,8 @@ class Scene(object):
                     elif len(waypoints) == 1:
                         path, is_linear = point.get_path(steps=episode_len-1)
                     else:
-                        path, is_linear = point.get_path(steps=50) # 默认步数
+                        # path, is_linear = point.get_path(steps=50) # 固定的默认步数，但一般是调试出的steps步骤，这样很不通用
+                        path, is_linear = point.get_path(steps=10) # 没有默认步数
                         
                     [s.set_collidable(True) for s in colliding_shapes]
                 except ConfigurationPathError as e:
@@ -421,12 +422,17 @@ class Scene(object):
                 
                 point.end_of_path()
                 path.clear_visualization() ###########################
-                    
+                
+                # print(self.robot.gripper.get_open_amount()[0])
+                
                 if len(ext) > 0:
                     contains_param = False
                     start_of_bracket = -1
                     gripper = self.robot.gripper
                     if 'open_gripper(' in ext:
+                        
+                        print("open_gripper")
+                        
                         gripper.release()
                         start_of_bracket = ext.index('open_gripper(') + 13
                         contains_param = ext[start_of_bracket] != ')'
@@ -440,6 +446,9 @@ class Scene(object):
                                     self._demo_record_step(
                                         demo, record, callable_each_step)
                     elif 'close_gripper(' in ext:
+                        
+                        print("close_gripper")
+                        
                         start_of_bracket = ext.index('close_gripper(') + 14
                         contains_param = ext[start_of_bracket] != ')'
                         if not contains_param:
@@ -493,9 +502,11 @@ class Scene(object):
             raise DemoError('Demo was completed, but was not successful.',
                             self.task)
         
-        if episode_len != 50 and self._lens_episode_count != episode_len : 
-            raise DemoError('Demo was completed, but was not the set lens of episode.',
-                            self.task)
+        print(episode_len)
+        
+        # if episode_len != 50 and self._lens_episode_count != episode_len : 
+        #     raise DemoError('Demo was completed, but was not the set lens of episode.',
+        #                     self.task)
         
         if is_linear == False:
             raise DemoError('Demo was completed, but was not linear path.',

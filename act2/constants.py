@@ -89,7 +89,6 @@ SIM_TASK_CONFIGS = {
         'episode_len': 36,
         'num_episodes': 50,
         'num_variation': 1,
-        'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
     'sorting_program_sawyer212':{ # 抓取 用imitate_episodes_sawyer4 ， 2蓝色
         'dataset_dir': '/home/boxjod/sawyer_ws/Datasets/sorting_program_sawyer212',# 单个颜色
@@ -133,6 +132,24 @@ SIM_TASK_CONFIGS = {
         'num_variation': 1,
         'camera_names': ['wrist'],# , 'wrist_depth', 'head'
     },
+    
+    'close_jar':{ # 抓取 用imitate_episodes_sawyer4， 3绿色-》红色
+        'dataset_dir': DATA_DIR + '/close_jar/variation0', # 单个颜色
+        'episode_len': 93, # 是一个平均值
+        'num_episodes': 50,
+        'num_variation': 1,
+        # 'camera_names': ['wrist', 'head'],# , 'wrist_depth', 'head'
+        'camera_names': ['wrist']
+    },
+    'slide_cabinet_open_and_place_cups':{ # 抓取 用imitate_episodes_sawyer4， 3绿色-》红色
+        'dataset_dir': DATA_DIR + '/slide_cabinet_open_and_place_cups/variation0', # 单个颜色
+        'episode_len': 100, # 是一个平均值
+        'num_episodes': 50,
+        'num_variation': 1,
+        # 'camera_names': ['wrist', 'head'],# , 'wrist_depth', 'head'
+        'camera_names': ['wrist']
+    },
+    
 }
 
 ### Simulation envs fixed constants

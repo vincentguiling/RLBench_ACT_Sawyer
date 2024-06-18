@@ -103,6 +103,9 @@ def save_demo(demo, example_path, ex_idx):
     max_timesteps = len(demo)
     
     for i, obs in enumerate(demo): 
+        
+        # print(f'{i=}:{obs.gripper_open=}')
+        
         if i != 0: # action是下一步的姿态 # 是 gpos的运动去向(xyz的变化)
             data_dict['/action'].append(np.append(obs.gripper_pose, obs.gripper_open))
             data_dict['/action_qpos'].append(np.append(obs.joint_positions, obs.gripper_open))
@@ -260,7 +263,7 @@ def run(i, lock, task_index, variation_count, results, file_lock, tasks):
             if abort_variation:
                 break
             # write the command json file for one variation
-        create_commands_json_files(variation_path, descriptions, (my_variation_count * FLAGS.episodes_per_task), FLAGS.episodes_per_task, task_config['episode_len'])
+        # create_commands_json_files(variation_path, descriptions, (my_variation_count * FLAGS.episodes_per_task), FLAGS.episodes_per_task, task_config['episode_len'])
         
     results[i] = tasks_with_problems
     rlbench_env.shutdown()

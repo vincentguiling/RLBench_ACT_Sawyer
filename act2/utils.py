@@ -108,7 +108,7 @@ class  EpisodicDataset(torch.utils.data.Dataset):
                 start_ts = np.random.choice(original_action_shape[0]) ######################### (30) #
                 end_ts = original_action_shape[0] - 1
                 
-            # episode_len = original_action_shape[0] # episode_len 不是固定了的，用end_ts代替episode_len
+            # episode_len = original_action_shape[0] # episode_len 不是固定了的，用 end_ts 代替episode_len
             # if sample_full_episode:
             #     start_ts = 0
             # else:
@@ -117,6 +117,7 @@ class  EpisodicDataset(torch.utils.data.Dataset):
             
             # get observation at start_ts only
             qpos = root['/observations/qpos'][start_ts]
+            
             gpos = root['/observations/gpos'][start_ts]
             if self.use_diff:
                 qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][0])]
@@ -158,7 +159,7 @@ class  EpisodicDataset(torch.utils.data.Dataset):
             history_images = []
             history_image_dict = dict()
 
-            if 'sorting_program5' in self.dataset_dir:# 用夹爪状态分割历史
+            if 'sorting_program5' in self.dataset_dir or 'close_jar' in self.dataset_dir:# 用夹爪状态分割历史
                 qpos_his = root['/observations/qpos'][0:start_ts + 1] # 只需要检测之前状态的改变
                 qpos_his_len = len(qpos_his) # 它会等于0
 
@@ -197,8 +198,12 @@ class  EpisodicDataset(torch.utils.data.Dataset):
                 # 更新diff
                 if self.use_diff:
                     qpos = root['/observations/qpos'][start_ts]
+                    
+                    # print(f"{qpos=} \n {root['/observations/qpos'][change_point]=}")
                     qpos_diff = [a-b for a,b in zip(qpos, root['/observations/qpos'][change_point])]
+                    # print(f"{qpos_diff=}")
                     qpos = np.append(qpos, qpos_diff[:7])
+                    # print(f"{qpos=}\n")
                     
                     gpos = root['/observations/gpos'][start_ts]
                     gpos_diff = [a-b for a,b in zip(gpos, root['/observations/gpos'][change_point])]
@@ -246,6 +251,8 @@ class  EpisodicDataset(torch.utils.data.Dataset):
             all_cam_images.append(image_dict[cam_name])
         all_cam_images = np.stack(all_cam_images, axis=0)
         
+        # print(f"{all_cam_images.shape=}")
+        
         # history_images 加入图像
         history_all_cam_images = []
         for history_idx in range(history_action_len):
@@ -283,10 +290,18 @@ class  EpisodicDataset(torch.utils.data.Dataset):
         image_data = image_data / 255.0
         history_images_data = history_images_data / 255.0
         
-        action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
+        # 标准化过程
+        # np.set_printoptions(linewidth=300)
+        action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"] 
+        # print(self.norm_stats["qpos_mean"])
+        # print(f"标准化之前{qpos_data=}")
+        # print(qpos_data - self.norm_stats["qpos_mean"])
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
+        # print(f"标准化之后：{qpos_data=}")
         gpos_data = (gpos_data - self.norm_stats["gpos_mean"]) / self.norm_stats["gpos_std"]
         history_action_data = (history_action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
+        
+        # return
         
         if self.use_language:
             return image_data, qpos_data, gpos_data, history_images_data, history_action_data, is_pad_history, action_data, is_pad_action, command_embedding
@@ -297,45 +312,167 @@ def get_norm_stats(dataset_dir, num_episodes, use_gpos=True, use_diff=True, acti
     all_qpos_data = []
     all_gpos_data = []
     all_action_data = []
+    max_episode_len = 0    
+            
     for episode_idx in range(num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
+            episode_len = root['/action'].shape[0]
             qpos = root['/observations/qpos'][()]
+            # print(f"{qpos.shape=}")
             gpos = root['/observations/gpos'][()]
             if action_is_qpos:
                 action = root['/action_qpos'][()]
             else:
                 action = root['/action'][()]
+                
+        #################
+        # 更正，反而成功率下降
+        if use_diff: 
+            # 还要查找 change point
+            qpos_len = len(qpos) # 它会等于0
+            gripper_state = qpos[qpos_len-1][7] # 读取了最后的状态
+            gripper_change_point = []
+
+            for idx in range(qpos_len-1, -1, -1): # 倒着来检测夹爪状态变化
+                if gripper_state != qpos[idx][7]:
+                    gripper_state = qpos[idx][7]
+                    gripper_change_point.append(idx+1)
+                    # break
+            gripper_change_point.append(0)
+            
+            # print(f"history_change = {gripper_change_point}")
+            
+            for idx in range(qpos.shape[0]):
+                for c_idx in range(len(gripper_change_point)):
+                    if gripper_change_point[c_idx] <= idx: # 0 <80,<30,<0正确
+                        last_change_point = gripper_change_point[c_idx]
+                        break
+                # print(f"{idx=}, {last_change_point=}")
+                qpos_diff = [a-b for a,b in zip(qpos[idx], qpos[last_change_point])]  # 就是因为精细化之后这里没改，导致错误
+                gpos_diff = [a-b for a,b in zip(gpos[idx], gpos[last_change_point])]
+                
+                qpos_temp = np.concatenate((qpos[idx],qpos_diff[:7]), axis=0)[np.newaxis,:]
+                gpos_temp = np.concatenate((gpos[idx],gpos_diff[:7]), axis=0)[np.newaxis,:]
+                
+                if idx == 0:
+                    qpos_data = qpos_temp
+                    gpos_data = gpos_temp
+                else:
+                    qpos_data = np.concatenate((qpos_data, qpos_temp), axis=0)     
+                    gpos_data = np.concatenate((gpos_data, gpos_temp), axis=0)                     
+            # print(f"{qpos_data.shape=}")
+       
+            if episode_idx == 0:
+                all_qpos_data = qpos_data
+                all_gpos_data = gpos_data
+                all_action_data = action
+            else:
+                all_qpos_data = np.concatenate((all_qpos_data, qpos_data), axis=0)
+                all_gpos_data = np.concatenate((all_gpos_data, gpos_data), axis=0)
+                all_action_data = np.concatenate((all_action_data, action), axis=0)
+        else: # 原始的样子
+            if episode_idx == 0:
+                all_qpos_data = qpos
+                all_gpos_data = gpos
+                all_action_data = action
+            else:
+                all_qpos_data = np.concatenate((all_qpos_data, qpos), axis=0)
+                all_gpos_data = np.concatenate((all_gpos_data, gpos), axis=0)
+                all_action_data = np.concatenate((all_action_data, action), axis=0)
+                
+        #################
+
+    #     # 错误但是正确率挺高的
+    #     if use_diff:
+    #         qpos_diff = [a-b for a,b in zip(qpos, qpos[0])] # 这不是该是change_point吗 # (90,8) - (1,8) => (8,8)
+    #         # print(f"{qpos.shape=}")
+    #         # print(f"{qpos[0].shape=}")
+    #         # print(f"{qpos_diff.shape=}") # (90,8)才是对的
+    #         # print(f"{len(qpos)=}") # (90,8)才是对的
+    #         # print(f"{len(qpos)=}") # (90,8)才是对的
+    #         qpos = np.append(qpos, qpos_diff)                       # 出问题了 # (90,8) + (7,8) = 776  # [:7]
+    #         # print(f"{len(qpos)=}") # (90,8)才是对的
+    #         gpos_diff = [a-b for a,b in zip(gpos, gpos[0])]
+    #         gpos = np.append(gpos, gpos_diff) # [:7]
+    #     all_qpos_data.append(torch.from_numpy(qpos))  # (50, 776)
+    #     all_gpos_data.append(torch.from_numpy(gpos))
+    #     all_action_data.append(torch.from_numpy(action))
         
-        if use_diff:
-            qpos_diff = [a-b for a,b in zip(qpos, qpos[0])]
-            qpos = np.append(qpos, qpos_diff[:7])
-            gpos_diff = [a-b for a,b in zip(gpos, gpos[0])]
-            gpos = np.append(gpos, gpos_diff[:7])
         
-        all_qpos_data.append(torch.from_numpy(qpos))
-        all_gpos_data.append(torch.from_numpy(gpos))
-        all_action_data.append(torch.from_numpy(action))
-        
-    all_qpos_data = torch.stack(all_qpos_data)
-    all_gpos_data = torch.stack(all_gpos_data)
-    all_action_data = torch.stack(all_action_data)
-    all_action_data = all_action_data
+    # # print(f"{all_qpos_data[0].shape=}")
+    
+    # # 错误但是正确率挺高的 (标准化过程涉及到所有关节和位移矢量牵引，计算出来的值，更加泛化？) 【更加泛性的标准差？】
+    # all_qpos_data = torch.stack(all_qpos_data)  # (50, 776)
+    # print(f"{all_qpos_data.shape=}") 
+    
+    # all_gpos_data = torch.stack(all_gpos_data)  # (50, 776)
+    # print(f"{all_gpos_data.shape=}") 
+    
+    # all_action_data = torch.stack(all_action_data) # (50, 90, 8)
+    # print(f"{all_action_data.shape=}") 
+    
+    # # normalize action data
+    # action_mean = all_action_data.mean(dim=[0, 1], keepdim=True) # (1, 1, 8)
+    # print(f"{action_mean.shape=}") 
+    
+    # action_std = all_action_data.std(dim=[0, 1], keepdim=True)  
+    # action_std = torch.clip(action_std, 1e-2, np.inf) # clipping
+    
+    # # normalize qpos data
+    # qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True) # (1, 1)
+    # print(f"{qpos_mean.shape=}") 
+    # qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True) 
+    # qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
+    
+    # gpos_mean = all_gpos_data.mean(dim=[0, 1], keepdim=True) # (1, 1)
+    # print(f"{gpos_mean.shape=}") 
+    # gpos_std = all_gpos_data.std(dim=[0, 1], keepdim=True)
+    # gpos_std = torch.clip(gpos_std, 1e-2, np.inf) # clipping
+    
+    
+    # 更正，反而成功率下降
+    all_qpos_data = np.array(all_qpos_data)
+    all_gpos_data = np.array(all_gpos_data)
+    all_action_data = np.array(all_action_data)
+    
+    all_qpos_data = torch.from_numpy(all_qpos_data) # 姿态要求不高
+    print(f"{all_qpos_data.shape=}") 
+    all_gpos_data = torch.from_numpy(all_gpos_data) # 姿态要求不高
+    print(f"{all_gpos_data.shape=}") 
+    all_action_data = torch.from_numpy(all_action_data) # 动作精度要求高
+    print(f"{all_action_data.shape=}") 
 
     # normalize action data
-    action_mean = all_action_data.mean(dim=[0, 1], keepdim=True)
-    action_std = all_action_data.std(dim=[0, 1], keepdim=True)
+    action_mean = all_action_data.mean(dim=0, keepdim=True).unsqueeze(0) # [1, 1, 8]
+    print(f"{action_mean.shape=}") 
+    action_std = all_action_data.std(dim=0, keepdim=True).unsqueeze(0)
     action_std = torch.clip(action_std, 1e-2, np.inf) # clipping
-
-    # normalize qpos data
-    qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
-    qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
-    qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
     
-    gpos_mean = all_gpos_data.mean(dim=[0, 1], keepdim=True)
-    gpos_std = all_gpos_data.std(dim=[0, 1], keepdim=True)
-    gpos_std = torch.clip(gpos_std, 1e-2, np.inf) # clipping
-
+    # normalize qpos data
+    if use_diff: 
+        qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True).unsqueeze(0) # [1, 1, 1]
+        print(f"{qpos_mean.shape=}")    
+        qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True).unsqueeze(0)
+        qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
+        
+        gpos_mean = all_gpos_data.mean(dim=[0, 1], keepdim=True).unsqueeze(0) # [1, 1, 1]
+        print(f"{gpos_mean.shape=}") 
+        gpos_std = all_gpos_data.std(dim=[0, 1], keepdim=True).unsqueeze(0)
+        gpos_std = torch.clip(gpos_std, 1e-2, np.inf) # clipping
+        # print(f"{gpos_mean=}")
+    else:
+        qpos_mean = all_qpos_data.mean(dim=0, keepdim=True).unsqueeze(0) # [1, 1, 8]
+        print(f"{qpos_mean.shape=}")    
+        qpos_std = all_qpos_data.std(dim=0, keepdim=True).unsqueeze(0)
+        qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
+        
+        gpos_mean = all_gpos_data.mean(dim=0, keepdim=True).unsqueeze(0) # [1, 1, 8]
+        print(f"{gpos_mean.shape=}") 
+        gpos_std = all_gpos_data.std(dim=0, keepdim=True).unsqueeze(0)
+        gpos_std = torch.clip(gpos_std, 1e-2, np.inf) # clipping
+        
+    
     stats = {"action_mean": action_mean.numpy().squeeze(), 
              "action_std": action_std.numpy().squeeze(),
              "qpos_mean": qpos_mean.numpy().squeeze(), 
@@ -358,7 +495,7 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     val_indices = shuffled_indices[int(train_ratio * num_episodes):]
     
     # obtain normalization stats for qpos and action
-    norm_stats = get_norm_stats(dataset_dir, num_episodes,use_gpos=use_gpos, use_diff=use_diff, action_is_qpos=action_is_qpos)
+    norm_stats = get_norm_stats(dataset_dir, num_episodes, use_gpos=use_gpos, use_diff=use_diff, action_is_qpos=action_is_qpos)
 
     # construct dataset and dataloader
     train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, max_len, num_queries, command_list, use_language, language_encoder,use_gpos=use_gpos, use_diff=use_diff, action_is_qpos=action_is_qpos)
